@@ -1,0 +1,190 @@
+@startuml
+title MoveCodeBeats - Diagrama de Classes
+skinparam classAttributeIconSize 0
+
+package "utils.config" {
+  class CameraConfig {
+    +device_index: int
+    +frame_width: int
+    +frame_height: int
+    +mirror_feed: bool
+    +max_num_hands: int
+    +min_detection_confidence: float
+    +min_presence_confidence: float
+    +min_tracking_confidence: float
+    +model_path: Path
+    +model_url: str
+  }
+
+  class ProcessingConfig {
+    +position_smoothing: float
+    +velocity_smoothing: float
+    +openness_smoothing: float
+    +velocity_reference: float
+    +hand_span_reference: float
+  }
+
+  class MappingConfig {
+    +root_midi: int
+    +octaves: int
+    +scale_intervals: tuple
+    +min_amplitude: float
+    +max_amplitude: float
+    +velocity_weight: float
+    +openness_weight: float
+  }
+
+  class AudioConfig {
+    +sample_rate: int
+    +block_size: int
+    +base_frequency: float
+  }
+
+  class UiConfig {
+    +window_name: str
+  }
+
+  class AppConfig {
+    +camera: CameraConfig
+    +processing: ProcessingConfig
+    +mapping: MappingConfig
+    +audio: AudioConfig
+    +ui: UiConfig
+  }
+}
+
+package "utils.models" {
+  class Landmark {
+    +x: float
+    +y: float
+    +z: float
+  }
+
+  class HandFrame {
+    +landmarks: list[Landmark]
+    +handedness: str
+    +timestamp: float
+  }
+
+  class MotionFeatures {
+    +raw_x: float
+    +raw_y: float
+    +x: float
+    +y: float
+    +velocity: float
+    +openness: float
+    +active: bool
+  }
+
+  class ScaleNote {
+    +midi: int
+    +label: str
+    +frequency: float
+    +strudel_token: str
+  }
+
+  class SoundParameters {
+    +frequency: float
+    +amplitude: float
+    +brightness: float
+    +note_label: str
+    +strudel_hint: str
+    +active: bool
+  }
+}
+
+package "capture" {
+  class HandTracker {
+    -_config: CameraConfig
+    -_capture
+    -_hands
+    +__init__(config: CameraConfig)
+    +read(): tuple[object, HandFrame | None]
+    +close(): None
+    -_create_landmarker(config: CameraConfig)
+    -_open_capture(device_index: int)
+    -_extract_hand(result: object): HandFrame | None
+  }
+}
+
+package "processing" {
+  class MovementProcessor {
+    -_config: ProcessingConfig
+    -_prev_raw_x: float | None
+    -_prev_raw_y: float | None
+    -_prev_timestamp: float | None
+    -_smoothed_x: float | None
+    -_smoothed_y: float | None
+    -_smoothed_velocity: float
+    -_smoothed_openness: float
+    +__init__(config: ProcessingConfig)
+    +process(hand_frame: HandFrame | None): MotionFeatures
+    -_compute_velocity(raw_x: float, raw_y: float, timestamp: float): float
+  }
+}
+
+package "mapping" {
+  class GestureMapper {
+    -_config: MappingConfig
+    -_scale: list[ScaleNote]
+    +__init__(config: MappingConfig)
+    +map(motion: MotionFeatures): SoundParameters
+    -_build_scale(): list[ScaleNote]
+  }
+}
+
+package "sound" {
+  class SoundEngine {
+    -_config: AudioConfig
+    -_lock
+    -_phase: float
+    -_current_frequency: float
+    -_current_amplitude: float
+    -_current_brightness: float
+    -_target_frequency: float
+    -_target_amplitude: float
+    -_target_brightness: float
+    -_stream
+    +__init__(config: AudioConfig)
+    +start(): None
+    +update(params: SoundParameters): None
+    +stop(): None
+    -_audio_callback(outdata, frames, time_info, status): None
+  }
+}
+
+package "utils.visualizer" {
+  class Visualizer <<utility>> {
+    +render_overlay(frame, hand_frame, motion, sound, audio_enabled, window_name)
+    -_draw_hand(overlay, hand_frame, frame_width, frame_height)
+  }
+}
+
+AppConfig *-- CameraConfig
+AppConfig *-- ProcessingConfig
+AppConfig *-- MappingConfig
+AppConfig *-- AudioConfig
+AppConfig *-- UiConfig
+
+HandFrame *-- "21" Landmark
+GestureMapper *-- ScaleNote
+
+HandTracker --> CameraConfig
+HandTracker --> HandFrame
+HandTracker --> Landmark
+
+MovementProcessor --> ProcessingConfig
+MovementProcessor --> HandFrame
+MovementProcessor --> MotionFeatures
+
+GestureMapper --> MappingConfig
+GestureMapper --> MotionFeatures
+GestureMapper --> SoundParameters
+
+SoundEngine --> AudioConfig
+SoundEngine --> SoundParameters
+
+Visualizer ..> HandFrame
+Visualizer ..> MotionFeatures
+Visualizer ..> SoundParameters
+@enduml

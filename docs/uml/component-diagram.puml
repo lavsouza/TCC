@@ -1,0 +1,71 @@
+@startuml
+title MoveCodeBeats - Diagrama de Componentes
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+
+actor "Usuario" as User
+node "Webcam" as Camera
+node "Tela OpenCV" as Screen
+node "Saida de Audio" as AudioOut
+component "MediaPipe\nHandLandmarker" as MediaPipe
+
+package "MoveCodeBeats" {
+  component "main.py\nOrquestracao" as Main
+
+  package "Captura" {
+    component "HandTracker\ncapture/hand_tracker.py" as HandTracker
+  }
+
+  package "Processamento" {
+    component "MovementProcessor\nprocessing/movement_processor.py" as MovementProcessor
+  }
+
+  package "Mapeamento Musical" {
+    component "GestureMapper\nmapping/gesture_mapper.py" as GestureMapper
+  }
+
+  package "Sintese Sonora" {
+    component "SoundEngine\nsound/sound_engine.py" as SoundEngine
+  }
+
+  package "Visualizacao" {
+    component "render_overlay\nutils/visualizer.py" as Visualizer
+  }
+
+  package "Base Compartilhada" {
+    component "Config\nutils/config.py" as Config
+    component "Models\nutils/models.py" as Models
+  }
+}
+
+User --> Camera : movimenta a mao\nem frente a camera
+Camera --> HandTracker : frame de video
+HandTracker --> MediaPipe : detect_for_video()
+HandTracker --> MovementProcessor : HandFrame
+MovementProcessor --> GestureMapper : MotionFeatures
+GestureMapper --> SoundEngine : SoundParameters
+SoundEngine --> AudioOut : bloco de audio digital
+
+HandTracker --> Visualizer : frame + landmarks
+MovementProcessor --> Visualizer : features
+GestureMapper --> Visualizer : nota e parametros
+Visualizer --> Screen : frame anotado
+
+Main --> HandTracker : instancia e chama read()
+Main --> MovementProcessor : chama process()
+Main --> GestureMapper : chama map()
+Main --> SoundEngine : start(), update(), stop()
+Main --> Visualizer : chama render_overlay()
+
+Config --> HandTracker
+Config --> MovementProcessor
+Config --> GestureMapper
+Config --> SoundEngine
+Config --> Visualizer
+
+Models --> HandTracker
+Models --> MovementProcessor
+Models --> GestureMapper
+Models --> SoundEngine
+Models --> Visualizer
+@enduml

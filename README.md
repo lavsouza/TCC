@@ -17,6 +17,9 @@ O projeto foi reorganizado em uma pipeline pequena (camadas), mas preparada para
 5. `main.py`
    Orquestra o ciclo principal, atualiza audio, renderiza feedback visual e faz cleanup de camera e janela.
 
+O desenho da arquitetura do sistema esta em `docs/architecture.md`.
+Os diagramas UML em PlantUML estao em `docs/uml/`.
+
 ## Por que esta arquitetura e melhor para o TCC
 
 - Separa claramente captura, processamento, mapeamento e saida sonora.

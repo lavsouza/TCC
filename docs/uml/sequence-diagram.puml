@@ -1,0 +1,63 @@
+@startuml
+title MoveCodeBeats - Diagrama de Sequencia
+autonumber
+
+actor Usuario
+participant "main.py" as Main
+participant "Camera" as Camera
+participant "HandTracker" as HandTracker
+participant "MovementProcessor" as MovementProcessor
+participant "GestureMapper" as GestureMapper
+participant "SoundEngine" as SoundEngine
+participant "Visualizer" as Visualizer
+participant "Tela OpenCV" as Screen
+participant "Saida de Audio" as AudioOut
+
+Main -> SoundEngine : start()
+activate SoundEngine
+SoundEngine --> Main : stream ativo
+deactivate SoundEngine
+
+loop enquanto a aplicacao estiver em execucao
+  Usuario -> Camera : movimenta a mao
+  Main -> HandTracker : read()
+  activate HandTracker
+  HandTracker -> Camera : read()
+  Camera --> HandTracker : frame
+  HandTracker -> HandTracker : espelha frame\nconverte BGR -> RGB\nexecuta MediaPipe
+  HandTracker --> Main : frame, HandFrame | None
+  deactivate HandTracker
+
+  Main -> MovementProcessor : process(hand_frame)
+  activate MovementProcessor
+  MovementProcessor -> MovementProcessor : calcula x, y,\nvelocidade e abertura\naplica suavizacao
+  MovementProcessor --> Main : MotionFeatures
+  deactivate MovementProcessor
+
+  Main -> GestureMapper : map(motion)
+  activate GestureMapper
+  GestureMapper -> GestureMapper : escolhe nota\ndefine amplitude\ndefine brilho
+  GestureMapper --> Main : SoundParameters
+  deactivate GestureMapper
+
+  Main -> SoundEngine : update(sound_params)
+  activate SoundEngine
+  SoundEngine -> SoundEngine : atualiza targets\nfrequency, amplitude,\nbrightness
+  SoundEngine --> Main : parametros recebidos
+  deactivate SoundEngine
+
+  Main -> Visualizer : render_overlay(frame,\nhand_frame, motion, sound)
+  activate Visualizer
+  Visualizer -> Visualizer : desenha landmarks,\nindices e texto
+  Visualizer --> Main : frame anotado
+  deactivate Visualizer
+
+  Main -> Screen : imshow(overlay)
+  SoundEngine -> SoundEngine : callback gera bloco\nde audio digital
+  SoundEngine -> AudioOut : envia buffer
+end
+
+Main -> HandTracker : close()
+Main -> SoundEngine : stop()
+Main -> Screen : destroyAllWindows()
+@enduml
