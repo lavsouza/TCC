@@ -8,15 +8,17 @@ participant "Camera" as Camera
 participant "HandTracker" as HandTracker
 participant "MovementProcessor" as MovementProcessor
 participant "GestureMapper" as GestureMapper
-participant "SoundEngine" as SoundEngine
 participant "Visualizer" as Visualizer
-participant "Tela OpenCV" as Screen
-participant "Saida de Audio" as AudioOut
+participant "StrudelOutput" as StrudelOutput
+participant "BridgeServer" as BridgeServer
+participant "Browser" as Browser
+participant "Strudel Runtime" as StrudelRuntime
 
-Main -> SoundEngine : start()
-activate SoundEngine
-SoundEngine --> Main : stream ativo
-deactivate SoundEngine
+Main -> StrudelOutput : start()
+activate StrudelOutput
+StrudelOutput -> BridgeServer : start()
+StrudelOutput --> Main : interface web pronta
+deactivate StrudelOutput
 
 loop enquanto a aplicacao estiver em execucao
   Usuario -> Camera : movimenta a mao
@@ -36,28 +38,31 @@ loop enquanto a aplicacao estiver em execucao
 
   Main -> GestureMapper : map(motion)
   activate GestureMapper
-  GestureMapper -> GestureMapper : escolhe nota\ndefine amplitude\ndefine brilho
+  GestureMapper -> GestureMapper : escolhe nota\ndefine gain\ndefine brilho
   GestureMapper --> Main : SoundParameters
   deactivate GestureMapper
-
-  Main -> SoundEngine : update(sound_params)
-  activate SoundEngine
-  SoundEngine -> SoundEngine : atualiza targets\nfrequency, amplitude,\nbrightness
-  SoundEngine --> Main : parametros recebidos
-  deactivate SoundEngine
 
   Main -> Visualizer : render_overlay(frame,\nhand_frame, motion, sound)
   activate Visualizer
   Visualizer -> Visualizer : desenha landmarks,\nindices e texto
-  Visualizer --> Main : frame anotado
+  Visualizer --> Main : overlay anotado
   deactivate Visualizer
 
-  Main -> Screen : imshow(overlay)
-  SoundEngine -> SoundEngine : callback gera bloco\nde audio digital
-  SoundEngine -> AudioOut : envia buffer
+  Main -> StrudelOutput : publish_state(sound_params)
+  activate StrudelOutput
+  StrudelOutput -> BridgeServer : payload type=state
+  BridgeServer -> Browser : JSON com nota,\ngain, brilho e codigo
+  Browser -> StrudelRuntime : atualiza pattern
+  deactivate StrudelOutput
+
+  Main -> StrudelOutput : publish_preview(overlay)
+  activate StrudelOutput
+  StrudelOutput -> BridgeServer : payload type=frame
+  BridgeServer -> Browser : JPEG base64 do preview
+  Browser -> Browser : atualiza painel da camera
+  deactivate StrudelOutput
 end
 
 Main -> HandTracker : close()
-Main -> SoundEngine : stop()
-Main -> Screen : destroyAllWindows()
+Main -> StrudelOutput : stop()
 @enduml

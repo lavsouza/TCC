@@ -45,10 +45,25 @@ class MappingConfig:
 
 
 @dataclass(slots=True)
-class AudioConfig:
-    sample_rate: int = 44100
-    block_size: int = 512
-    base_frequency: float = 220.0
+class StrudelConfig:
+    enabled: bool = True
+    ws_host: str = "127.0.0.1"
+    ws_port: int = 8765
+    http_host: str = "127.0.0.1"
+    http_port: int = 8080
+    update_hz: int = 8
+    note_change_immediate: bool = True
+    gain_precision: int = 3
+    gain_delta: float = 0.03
+    brightness_delta: float = 0.05
+    lpf_min: int = 400
+    lpf_max: int = 4000
+    synth_name: str = "sawtooth"
+    auto_open_browser: bool = False
+    send_inactive_state: bool = True
+    preview_update_hz: int = 12
+    preview_jpeg_quality: int = 72
+    preview_max_width: int = 960
 
 
 @dataclass(slots=True)
@@ -61,7 +76,7 @@ class AppConfig:
     camera: CameraConfig = field(default_factory=CameraConfig)
     processing: ProcessingConfig = field(default_factory=ProcessingConfig)
     mapping: MappingConfig = field(default_factory=MappingConfig)
-    audio: AudioConfig = field(default_factory=AudioConfig)
+    strudel: StrudelConfig = field(default_factory=StrudelConfig)
     ui: UiConfig = field(default_factory=UiConfig)
 
 

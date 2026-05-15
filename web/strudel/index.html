@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MoveCodeBeats + Strudel</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script src="https://unpkg.com/@strudel/web@1.0.3"></script>
+    <script defer src="./app.js"></script>
+  </head>
+  <body>
+    <main class="layout">
+      <section class="panel hero">
+        <p class="eyebrow">MoveCodeBeats</p>
+        <h1>Interface Browser-First</h1>
+        <p class="description">
+          Esta interface recebe o preview da camera com overlay do prototipo e o
+          estado musical atual para execucao no Strudel, tudo no navegador.
+        </p>
+        <div class="actions">
+          <button id="connect-button" type="button">Conectar</button>
+          <button id="play-button" type="button">Ativar Audio</button>
+          <button id="stop-button" type="button">Parar</button>
+        </div>
+        <p id="status-text" class="status">Carregando configuracao local...</p>
+      </section>
+
+      <section class="workspace-grid">
+        <section class="panel preview-panel">
+          <div class="panel-header">
+            <h2>Camera + Overlay</h2>
+            <span class="badge">WebSocket</span>
+          </div>
+          <div class="preview-frame">
+            <img id="preview-image" alt="Preview da camera" />
+            <p id="preview-placeholder" class="preview-placeholder">
+              Aguardando preview da camera...
+            </p>
+          </div>
+        </section>
+
+        <section class="panel state-panel">
+          <div class="panel-header">
+            <h2>Estado Atual</h2>
+            <span class="badge">Strudel</span>
+          </div>
+          <dl class="state-grid">
+            <div>
+              <dt>Nota</dt>
+              <dd id="note-value">--</dd>
+            </div>
+            <div>
+              <dt>Nota Strudel</dt>
+              <dd id="strudel-note-value">~</dd>
+            </div>
+            <div>
+              <dt>Frequencia</dt>
+              <dd id="frequency-value">0.0 Hz</dd>
+            </div>
+            <div>
+              <dt>Gain</dt>
+              <dd id="gain-value">0.000</dd>
+            </div>
+            <div>
+              <dt>Brilho</dt>
+              <dd id="brightness-value">0.000</dd>
+            </div>
+            <div>
+              <dt>LPF</dt>
+              <dd id="lpf-value">0</dd>
+            </div>
+            <div>
+              <dt>Synth</dt>
+              <dd id="synth-value">square</dd>
+            </div>
+            <div>
+              <dt>Ativo</dt>
+              <dd id="active-value">nao</dd>
+            </div>
+          </dl>
+        </section>
+      </section>
+
+      <section class="panel code-panel">
+        <div class="panel-header">
+          <h2>Codigo Strudel Equivalente</h2>
+          <span class="badge">Live Coding</span>
+        </div>
+        <pre id="code-view">Aguardando dados do Python...</pre>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,36 +1,39 @@
 # MoveCodeBeats
 
-Prototipo inicial de TCC para transformar movimentos corporais em parametros musicais. Nesta fase o projeto foca em capturar a mao, extrair features de movimento e produzir uma representacao sonora local, sem integrar diretamente com Strudel ainda.
+Prototipo inicial de TCC para transformar movimentos corporais em parametros musicais. Nesta fase o projeto foca em capturar a mao, extrair features de movimento e publicar uma interface unificada no navegador, combinando preview da camera com overlay e execucao Strudel.
 
 ## Arquitetura revisada
 
-O projeto foi reorganizado em uma pipeline pequena (camadas), mas preparada para crescer:
+O projeto foi reorganizado em uma pipeline pequena separada em camadas:
 
 1. `capture/hand_tracker.py`
    Responsavel por abrir a camera, espelhar o feed e extrair landmarks da mao com MediaPipe.
 2. `processing/movement_processor.py`
    Converte landmarks em features mais estaveis: posicao suavizada, velocidade do indicador e abertura entre polegar e indicador.
 3. `mapping/gesture_mapper.py`
-   Traduz as features em parametros musicais coerentes: nota, frequencia, amplitude, brilho.
-4. `sound/sound_engine.py`
-   Mantem um fluxo continuo de audio com `sounddevice`, em vez de tocar um buffer novo a cada frame.
-5. `main.py`
-   Orquestra o ciclo principal, atualiza audio, renderiza feedback visual e faz cleanup de camera e janela.
+   Traduz as features em parametros musicais coerentes: nota, frequencia, amplitude e brilho.
+4. `integration/strudel/`
+   Publica o estado musical do prototipo, gera o codigo Strudel equivalente e envia tudo para a interface web por HTTP + WebSocket.
+5. `utils/visualizer.py`
+   Desenha a malha da mao, os indices dos landmarks e os valores principais do sistema sobre o frame da camera.
+6. `main.py`
+   Orquestra o ciclo principal, atualiza a ponte web e faz o cleanup da camera e dos servidores locais.
 
 O desenho da arquitetura do sistema esta em `docs/architecture.md`.
 Os diagramas UML em PlantUML estao em `docs/uml/`.
+O detalhamento tecnico completo da implementacao atual esta em `docs/implementation-deep-dive.md`.
 
 ## Por que esta arquitetura e melhor para o TCC
 
-- Separa claramente captura, processamento, mapeamento e saida sonora.
-- Facilita trocar o sintetizador local por uma ponte com Strudel ou Supercollider no futuro.
-- Permite testar regras de mapeamento sem depender de camera ou audio.
-- Torna o prototipo mais estavel para demonstracao, porque evita `sd.play()` a cada frame.
+- Separa claramente captura, processamento, mapeamento e saida web.
+- Centraliza o prototipo no navegador, mais alinhado ao caminho de integracao com Strudel.
+- Facilita trocar a traducao atual por patterns e eventos gestuais mais sofisticados.
+- Permite demonstracao visual e sonora em uma unica interface.
 
 ## Mapeamento atual
 
 - Movimento horizontal (eixo x) do indicador -> escolha de nota em escala pentatonica menor.
-- Movimento vertical (eixo y)  do indicador -> amplitude.
+- Movimento vertical (eixo y) do indicador -> gain.
 - Velocidade da mao -> brilho timbrico.
 - Abertura entre polegar e indicador -> influencia adicional no brilho.
 
@@ -50,8 +53,27 @@ Na primeira execucao, o projeto pode baixar automaticamente o modelo `hand_landm
 .\.venv\Scripts\python.exe main.py
 ```
 
-Pressione `q` ou `Esc` para sair.
+Ao iniciar:
+
+1. o terminal exibe a URL local da interface, por padrao `http://127.0.0.1:8080`
+2. abra essa URL no navegador
+3. clique em `Conectar`
+4. clique em `Ativar Audio`
+
+Para encerrar o prototipo, use `Ctrl+C` no terminal onde o backend Python esta rodando.
+
+## Interface Browser-First
+
+O prototipo agora funciona sem a janela local do OpenCV e sem o sintetizador local anterior.
+
+- O backend Python continua responsavel pela captura da camera e pela deteccao da mao.
+- O overlay visual e convertido em preview JPEG e enviado ao navegador via WebSocket.
+- O estado musical atual tambem e enviado ao navegador.
+- A pagina renderiza o preview da camera, mostra os parametros atuais e executa o Strudel diretamente no browser.
+
+Nesta versao, o sistema ainda trabalha com estado continuo e nao com patterns gestuais complexos.
 
 ## Proximas etapas sugeridas
 
-- Captura da segunda mão e definição de quais parametros sonoros ela vai controlar
+- Definir eventos gestuais discretos para gerar patterns Strudel mais expressivos
+- Captura da segunda mao e definicao de quais parametros sonoros ela vai controlar

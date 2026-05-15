@@ -34,10 +34,23 @@ package "utils.config" {
     +openness_weight: float
   }
 
-  class AudioConfig {
-    +sample_rate: int
-    +block_size: int
-    +base_frequency: float
+  class StrudelConfig {
+    +enabled: bool
+    +ws_host: str
+    +ws_port: int
+    +http_host: str
+    +http_port: int
+    +update_hz: int
+    +gain_precision: int
+    +gain_delta: float
+    +brightness_delta: float
+    +lpf_min: int
+    +lpf_max: int
+    +synth_name: str
+    +send_inactive_state: bool
+    +preview_update_hz: int
+    +preview_jpeg_quality: int
+    +preview_max_width: int
   }
 
   class UiConfig {
@@ -48,7 +61,7 @@ package "utils.config" {
     +camera: CameraConfig
     +processing: ProcessingConfig
     +mapping: MappingConfig
-    +audio: AudioConfig
+    +strudel: StrudelConfig
     +ui: UiConfig
   }
 }
@@ -80,7 +93,6 @@ package "utils.models" {
     +midi: int
     +label: str
     +frequency: float
-    +strudel_token: str
   }
 
   class SoundParameters {
@@ -88,8 +100,29 @@ package "utils.models" {
     +amplitude: float
     +brightness: float
     +note_label: str
-    +strudel_hint: str
     +active: bool
+  }
+}
+
+package "integration.strudel.models" {
+  class StrudelState {
+    +active: bool
+    +note_label: str
+    +strudel_note: str
+    +frequency: float
+    +gain: float
+    +brightness: float
+    +lpf: int
+    +synth: str
+    +code: str
+    +timestamp: float
+  }
+
+  class PreviewFrame {
+    +image: str
+    +width: int
+    +height: int
+    +timestamp: float
   }
 }
 
@@ -101,9 +134,6 @@ package "capture" {
     +__init__(config: CameraConfig)
     +read(): tuple[object, HandFrame | None]
     +close(): None
-    -_create_landmarker(config: CameraConfig)
-    -_open_capture(device_index: int)
-    -_extract_hand(result: object): HandFrame | None
   }
 }
 
@@ -119,7 +149,6 @@ package "processing" {
     -_smoothed_openness: float
     +__init__(config: ProcessingConfig)
     +process(hand_frame: HandFrame | None): MotionFeatures
-    -_compute_velocity(raw_x: float, raw_y: float, timestamp: float): float
   }
 }
 
@@ -129,61 +158,86 @@ package "mapping" {
     -_scale: list[ScaleNote]
     +__init__(config: MappingConfig)
     +map(motion: MotionFeatures): SoundParameters
-    -_build_scale(): list[ScaleNote]
   }
 }
 
-package "sound" {
-  class SoundEngine {
-    -_config: AudioConfig
-    -_lock
-    -_phase: float
-    -_current_frequency: float
-    -_current_amplitude: float
-    -_current_brightness: float
-    -_target_frequency: float
-    -_target_amplitude: float
-    -_target_brightness: float
-    -_stream
-    +__init__(config: AudioConfig)
+package "integration.strudel" {
+  class StrudelPublisher {
+    -_config: StrudelConfig
+    -_last_state: StrudelState | None
+    -_last_publish_at: float
+    +build_state(params: SoundParameters): StrudelState
+    +should_publish(state: StrudelState): bool
+  }
+
+  class PreviewPublisher {
+    -_config: StrudelConfig
+    -_last_publish_at: float
+    +build_frame(overlay): PreviewFrame
+    +should_publish(): bool
+  }
+
+  class StrudelBridgeServer {
     +start(): None
-    +update(params: SoundParameters): None
+    +publish(payload: dict): None
     +stop(): None
-    -_audio_callback(outdata, frames, time_info, status): None
+  }
+
+  class StrudelWebServer {
+    +base_url: str
+    +start(): None
+    +stop(): None
+  }
+
+  class StrudelOutput {
+    -_config: StrudelConfig
+    -_state_publisher: StrudelPublisher
+    -_preview_publisher: PreviewPublisher
+    -_bridge: StrudelBridgeServer
+    -_web_server: StrudelWebServer
+    +enabled: bool
+    +web_url: str
+    +start(): None
+    +publish_state(params: SoundParameters): None
+    +publish_preview(overlay): None
+    +stop(): None
   }
 }
 
 package "utils.visualizer" {
   class Visualizer <<utility>> {
-    +render_overlay(frame, hand_frame, motion, sound, audio_enabled, window_name)
-    -_draw_hand(overlay, hand_frame, frame_width, frame_height)
+    +render_overlay(frame, hand_frame, motion, sound, title)
   }
 }
 
 AppConfig *-- CameraConfig
 AppConfig *-- ProcessingConfig
 AppConfig *-- MappingConfig
-AppConfig *-- AudioConfig
+AppConfig *-- StrudelConfig
 AppConfig *-- UiConfig
 
 HandFrame *-- "21" Landmark
 GestureMapper *-- ScaleNote
+StrudelOutput *-- StrudelPublisher
+StrudelOutput *-- PreviewPublisher
+StrudelOutput *-- StrudelBridgeServer
+StrudelOutput *-- StrudelWebServer
 
 HandTracker --> CameraConfig
 HandTracker --> HandFrame
-HandTracker --> Landmark
-
 MovementProcessor --> ProcessingConfig
 MovementProcessor --> HandFrame
 MovementProcessor --> MotionFeatures
-
 GestureMapper --> MappingConfig
 GestureMapper --> MotionFeatures
 GestureMapper --> SoundParameters
-
-SoundEngine --> AudioConfig
-SoundEngine --> SoundParameters
-
+StrudelPublisher --> StrudelConfig
+StrudelPublisher --> SoundParameters
+StrudelPublisher --> StrudelState
+PreviewPublisher --> StrudelConfig
+PreviewPublisher --> PreviewFrame
+StrudelOutput --> StrudelConfig
+StrudelOutput --> SoundParameters
 Visualizer ..> HandFrame
 Visualizer ..> MotionFeatures
 Visualizer ..> SoundParameters

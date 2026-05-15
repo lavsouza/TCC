@@ -18,8 +18,7 @@ def render_overlay(
     hand_frame: HandFrame | None,
     motion: MotionFeatures,
     sound: SoundParameters,
-    audio_enabled: bool,
-    window_name: str,
+    title: str,
 ):
     overlay = frame.copy()
     frame_height, frame_width = overlay.shape[:2]
@@ -28,19 +27,18 @@ def render_overlay(
         _draw_hand(overlay, hand_frame, frame_width, frame_height)
 
     status = "Mao detectada" if hand_frame else "Aproxime uma mao da camera"
-    audio_status = "Audio ativo" if audio_enabled else "Audio desabilitado"
 
     lines = [
-        window_name,
+        title,
         status,
-        audio_status,
+        "Saida ativa: navegador + Strudel",
         f"Nota: {sound.note_label}",
         f"Frequencia: {sound.frequency:.1f} Hz",
         f"Amplitude: {sound.amplitude:.2f}",
         f"Brilho: {sound.brightness:.2f}",
         f"Velocidade: {motion.velocity:.2f}",
         f"Abertura: {motion.openness:.2f}",
-        "Sair: q ou esc",
+        "Encerramento: Ctrl+C no terminal",
     ]
 
     y = 30

@@ -5,9 +5,9 @@ skinparam packageStyle rectangle
 
 actor "Usuario" as User
 node "Webcam" as Camera
-node "Tela OpenCV" as Screen
-node "Saida de Audio" as AudioOut
+node "Navegador" as Browser
 component "MediaPipe\nHandLandmarker" as MediaPipe
+component "Strudel Runtime" as StrudelRuntime
 
 package "MoveCodeBeats" {
   component "main.py\nOrquestracao" as Main
@@ -24,12 +24,16 @@ package "MoveCodeBeats" {
     component "GestureMapper\nmapping/gesture_mapper.py" as GestureMapper
   }
 
-  package "Sintese Sonora" {
-    component "SoundEngine\nsound/sound_engine.py" as SoundEngine
-  }
-
   package "Visualizacao" {
     component "render_overlay\nutils/visualizer.py" as Visualizer
+  }
+
+  package "Saida Web + Strudel" {
+    component "StrudelOutput\nintegration/strudel/output.py" as StrudelOutput
+    component "BridgeServer\nintegration/strudel/bridge_server.py" as BridgeServer
+    component "WebServer\nintegration/strudel/web_server.py" as WebServer
+    component "PreviewPublisher\nintegration/strudel/preview_publisher.py" as PreviewPublisher
+    component "StatePublisher\nintegration/strudel/publisher.py" as StatePublisher
   }
 
   package "Base Compartilhada" {
@@ -38,34 +42,40 @@ package "MoveCodeBeats" {
   }
 }
 
-User --> Camera : movimenta a mao\nem frente a camera
+User --> Camera : movimenta a mao
 Camera --> HandTracker : frame de video
 HandTracker --> MediaPipe : detect_for_video()
 HandTracker --> MovementProcessor : HandFrame
 MovementProcessor --> GestureMapper : MotionFeatures
-GestureMapper --> SoundEngine : SoundParameters
-SoundEngine --> AudioOut : bloco de audio digital
-
 HandTracker --> Visualizer : frame + landmarks
 MovementProcessor --> Visualizer : features
 GestureMapper --> Visualizer : nota e parametros
-Visualizer --> Screen : frame anotado
 
-Main --> HandTracker : instancia e chama read()
-Main --> MovementProcessor : chama process()
-Main --> GestureMapper : chama map()
-Main --> SoundEngine : start(), update(), stop()
-Main --> Visualizer : chama render_overlay()
+GestureMapper --> StrudelOutput : SoundParameters
+Visualizer --> StrudelOutput : overlay da camera
+StrudelOutput --> StatePublisher
+StrudelOutput --> PreviewPublisher
+StrudelOutput --> BridgeServer : publica payloads
+StrudelOutput --> WebServer : serve UI
+BridgeServer --> Browser : WebSocket
+WebServer --> Browser : HTTP
+Browser --> StrudelRuntime : executa codigo
+
+Main --> HandTracker : read(), close()
+Main --> MovementProcessor : process()
+Main --> GestureMapper : map()
+Main --> Visualizer : render_overlay()
+Main --> StrudelOutput : start(), publish_state(), publish_preview(), stop()
 
 Config --> HandTracker
 Config --> MovementProcessor
 Config --> GestureMapper
-Config --> SoundEngine
 Config --> Visualizer
+Config --> StrudelOutput
 
 Models --> HandTracker
 Models --> MovementProcessor
 Models --> GestureMapper
-Models --> SoundEngine
 Models --> Visualizer
+Models --> StrudelOutput
 @enduml

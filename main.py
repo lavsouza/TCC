@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import cv2
-
 from capture.hand_tracker import HandTracker
+from integration.strudel.output import StrudelOutput
 from mapping.gesture_mapper import GestureMapper
 from processing.movement_processor import MovementProcessor
-from sound.sound_engine import SoundEngine
 from utils.config import load_config
 from utils.visualizer import render_overlay
 
@@ -21,44 +19,44 @@ def main() -> int:
 
     processor = MovementProcessor(config.processing)
     mapper = GestureMapper(config.mapping)
-    sound_engine = SoundEngine(config.audio)
-    audio_enabled = True
+    strudel_output = StrudelOutput(config.strudel)
 
     try:
+        if not strudel_output.enabled:
+            print("[erro] A saida Strudel precisa estar habilitada nesta versao do prototipo.")
+            return 1
+
         try:
-            sound_engine.start()
+            strudel_output.start()
         except RuntimeError as exc:
-            audio_enabled = False
-            print(f"[aviso] {exc}")
-            print("[aviso] O prototipo seguira apenas com feedback visual.")
+            print(f"[erro] {exc}")
+            return 1
+
+        print(f"[info] Strudel disponivel em {strudel_output.web_url}")
+        print("[info] Abra a interface no navegador e use Ctrl+C no terminal para encerrar.")
 
         while True:
             frame, hand_frame = tracker.read()
             motion = processor.process(hand_frame)
             sound_params = mapper.map(motion)
 
-            if audio_enabled:
-                sound_engine.update(sound_params)
-
             overlay = render_overlay(
                 frame=frame,
                 hand_frame=hand_frame,
                 motion=motion,
                 sound=sound_params,
-                audio_enabled=audio_enabled,
-                window_name=config.ui.window_name,
+                title=config.ui.window_name,
             )
-            cv2.imshow(config.ui.window_name, overlay)
+            strudel_output.publish_state(sound_params)
+            strudel_output.publish_preview(overlay)
 
-            key = cv2.waitKey(1) & 0xFF
-            if key in (27, ord("q")):
-                break
-
+        return 0
+    except KeyboardInterrupt:
+        print("\n[info] Encerrando o prototipo...")
         return 0
     finally:
         tracker.close()
-        sound_engine.stop()
-        cv2.destroyAllWindows()
+        strudel_output.stop()
 
 
 if __name__ == "__main__":
