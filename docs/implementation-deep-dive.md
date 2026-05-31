@@ -198,11 +198,11 @@ Quando `main.py` e executado:
 
 Em cada iteracao:
 
-1. `tracker.read()` captura um frame da camera e tenta detectar uma mao;
-2. `processor.process(hand_frame)` transforma landmarks em features numericas;
+1. `tracker.read()` captura um frame da camera e tenta detectar ate duas maos;
+2. `processor.process(hands_frame)` transforma landmarks em features numericas;
 3. `mapper.map(motion)` converte features em parametros sonoros;
 4. `render_overlay(...)` desenha landmarks e informacoes textuais;
-5. `strudel_output.publish_state(sound_params)` envia o estado musical;
+5. `strudel_output.publish_state(motion, sound_params)` envia o estado musical enriquecido com o papel das duas maos;
 6. `strudel_output.publish_preview(overlay)` envia um preview JPEG do frame anotado.
 
 ## 5.3 Encerramento
@@ -283,8 +283,8 @@ Campos:
   - resolucao alvo da captura.
 - `mirror_feed=True`
   - espelha horizontalmente o video.
-- `max_num_hands=1`
-  - limita a inferencia a uma mao.
+- `max_num_hands=2`
+  - permite inferencia de ate duas maos no mesmo frame.
 - `min_detection_confidence=0.65`
 - `min_presence_confidence=0.5`
 - `min_tracking_confidence=0.55`
@@ -301,12 +301,14 @@ Campos:
 - `openness_smoothing=0.2`
 - `velocity_reference=1.3`
 - `hand_span_reference=2.2`
+- `primary_handedness="right"`
 
 Interpretacao:
 
 - os tres primeiros valores sao fatores `alpha` para media exponencial;
 - `velocity_reference` define a velocidade considerada suficiente para normalizar o valor perto de `1`;
-- `hand_span_reference` regula a abertura normalizada da mao.
+- `hand_span_reference` regula a abertura normalizada da mao;
+- `primary_handedness` define a mao preferencial para controle quando duas maos sao detectadas e nao existe ainda uma mao ativa persistida.
 
 ### 6.2.5 `MappingConfig`
 
@@ -317,6 +319,8 @@ Interpretacao:
 - `max_amplitude=0.65`
 - `velocity_weight=0.6`
 - `openness_weight=0.4`
+- `default_synth_name="sawtooth"`
+- `secondary_synths=("sine", "triangle", "sawtooth", "square")`
 
 ### 6.2.6 `StrudelConfig`
 
@@ -327,6 +331,7 @@ Campos de transporte:
 - `ws_port=8765`
 - `http_host="127.0.0.1"`
 - `http_port=8080`
+- `port_search_span=20`
 
 Campos de publicacao do estado musical:
 
@@ -337,7 +342,7 @@ Campos de publicacao do estado musical:
 - `brightness_delta=0.05`
 - `lpf_min=400`
 - `lpf_max=4000`
-- `synth_name="square"`
+- `synth_name="sawtooth"`
 - `send_inactive_state=True`
 
 Campos de publicacao do preview:
@@ -349,6 +354,10 @@ Campos de publicacao do preview:
 Campo utilitario:
 
 - `auto_open_browser=False`
+
+Observacao:
+
+- se as portas preferenciais estiverem ocupadas ou bloqueadas, os servidores HTTP e WebSocket tentam automaticamente as portas seguintes dentro da faixa definida por `port_search_span`.
 
 ### 6.2.7 `UiConfig`
 
@@ -410,9 +419,35 @@ Representa a mao detectada em um instante:
 - `handedness: str`
 - `timestamp: float`
 
-### 6.3.4 `MotionFeatures`
+Observacao importante:
 
-Representa a mao ja traduzida em variaveis semanticas:
+- `HandFrame` continua sendo a estrutura de uma mao individual.
+- a expansao para duas maos adiciona um contêiner acima dele, `HandsFrame`, em vez de alterar o significado de `HandFrame`.
+
+### 6.3.4 `HandsFrame`
+
+Representa o conjunto de maos detectadas no mesmo frame:
+
+- `hands: list[HandFrame]`
+- `timestamp: float`
+
+Metodos e propriedades relevantes:
+
+- `count`
+- `handedness_labels`
+- `get_hand(handedness)`
+- `select_primary(preferred_handedness=None)`
+
+`select_primary(...)` aplica a regra atual de selecao:
+
+1. tenta a mao preferida informada;
+2. se nao existir, tenta `"right"`;
+3. se nao existir, tenta `"left"`;
+4. se ainda assim nao houver correspondencia, usa a primeira mao disponivel.
+
+### 6.3.5 `HandMotion`
+
+Representa uma mao isolada ja traduzida em variaveis semanticas:
 
 - `raw_x`
 - `raw_y`
@@ -420,14 +455,31 @@ Representa a mao ja traduzida em variaveis semanticas:
 - `y`
 - `velocity`
 - `openness`
+- `handedness`
 - `active`
 
 Observacao importante:
 
 - `raw_x` e `raw_y` sao os valores brutos clamped;
-- `x` e `y` sao os valores suavizados.
+- `x` e `y` sao os valores suavizados;
+- `velocity` e `openness` pertencem a essa mao especifica, nao ao frame inteiro.
 
-### 6.3.5 `ScaleNote`
+### 6.3.6 `MotionFeatures`
+
+Representa o estado combinado do frame atual:
+
+- `primary: HandMotion`
+- `secondary: HandMotion`
+- `hands_detected: int`
+
+Propriedades derivadas:
+
+- `active` -> espelha `primary.active`
+- `x`, `y`, `velocity`, `openness`, `handedness` -> atalhos para a mao primaria
+- `has_secondary` -> indica se ha uma mao secundaria util no frame
+- `secondary_handedness` -> handedness da mao secundaria
+
+### 6.3.7 `ScaleNote`
 
 Representa uma nota precomputada da escala:
 
@@ -435,7 +487,7 @@ Representa uma nota precomputada da escala:
 - `label`
 - `frequency`
 
-### 6.3.6 `SoundParameters`
+### 6.3.8 `SoundParameters`
 
 Representa o estado musical calculado pelo mapper:
 
@@ -443,12 +495,14 @@ Representa o estado musical calculado pelo mapper:
 - `amplitude`
 - `brightness`
 - `note_label`
+- `synth_name`
 - `active`
 
 Observacao importante:
 
 - `SoundParameters.frequency` ainda existe e e calculado com precisao, embora o frontend atual do Strudel execute pela nota (`note(...)`) e nao por `freq(...)`.
 - Portanto, `frequency` hoje e usada principalmente para observabilidade, depuracao e extensao futura.
+- `synth_name` permite que a mao secundaria escolha explicitamente qual synth do Strudel sera usado na execucao.
 
 ---
 
@@ -496,7 +550,7 @@ Motivo:
 5. encapsula o frame em `mp.Image`
 6. gera `timestamp_ms = int(time.perf_counter() * 1000)`
 7. chama `detect_for_video`
-8. converte a resposta para `HandFrame`
+8. converte a resposta para `HandsFrame`
 
 ### 6.4.6 Por que `time.perf_counter()`?
 
@@ -781,12 +835,17 @@ Interpretacao:
 - mao mais alta (`y` menor) -> gain maior;
 - mao mais baixa (`y` maior) -> gain menor.
 
-### 6.6.8 Mapeamento de velocidade + abertura para brilho
+### 6.6.8 Mapeamento da mao secundaria para brilho
+
+Na implementacao atual, o brilho usa a mao secundaria quando ela esta presente. Caso contrario, faz fallback para a mao primaria.
 
 ```text
+modulator = motion.secondary, se motion.secondary.active
+modulator = motion.primary, caso contrario
+
 brightness = clamp(
-    motion.velocity * velocity_weight +
-    motion.openness * openness_weight
+    modulator.velocity * velocity_weight +
+    modulator.openness * openness_weight
 )
 ```
 
@@ -794,12 +853,40 @@ Com valores atuais:
 
 ```text
 brightness = clamp(
-    motion.velocity * 0.6 +
-    motion.openness * 0.4
+    modulator.velocity * 0.6 +
+    modulator.openness * 0.4
 )
 ```
 
-### 6.6.9 Estado sem mao
+### 6.6.9 Mapeamento da mao secundaria para synth
+
+Se a mao secundaria estiver ativa, sua posicao horizontal define o synth do Strudel:
+
+```text
+synth_index = round(motion.secondary.x * (len(secondary_synths) - 1))
+synth = secondary_synths[synth_index]
+```
+
+Com os defaults atuais:
+
+```text
+secondary_synths = ("sine", "triangle", "sawtooth", "square")
+```
+
+Portanto:
+
+- mais a esquerda -> `sine`
+- meio-esquerda -> `triangle`
+- meio-direita -> `sawtooth`
+- mais a direita -> `square`
+
+Se nao houver mao secundaria:
+
+```text
+synth = default_synth_name = "sawtooth"
+```
+
+### 6.6.10 Estado sem mao
 
 Se `motion.active == False`, o mapper retorna:
 
@@ -844,13 +931,15 @@ Passos:
 
 - titulo (`window_name`)
 - status da mao
+- mao primaria e mao secundaria
 - string fixa `Saida ativa: navegador + Strudel`
 - nota
 - frequencia
 - amplitude
 - brilho
-- velocidade
-- abertura
+- synth
+- velocidade e abertura da mao primaria
+- velocidade e abertura da mao secundaria
 - instrucao de encerramento
 
 ### 6.7.5 Desenho dos landmarks
@@ -889,6 +978,10 @@ Campos:
 - `brightness`
 - `lpf`
 - `synth`
+- `hands_detected`
+- `primary_handedness`
+- `secondary_handedness`
+- `brightness_source`
 - `code`
 - `timestamp`
 
@@ -1019,7 +1112,7 @@ gain = round(params.amplitude, gain_precision) se ativo; caso contrario 0.0
 brightness = round(params.brightness, 3) se ativo; caso contrario 0.0
 lpf = round(lpf_min + brightness * (lpf_max - lpf_min))
 frequency = params.frequency se ativo; caso contrario 0.0
-synth = config.synth_name
+synth = params.synth_name se ativo; caso contrario config.synth_name
 timestamp = time.time()
 code = build_code(state)
 ```
@@ -1587,6 +1680,10 @@ Exemplo representativo:
   "brightness": 0.2,
   "lpf": 1120,
   "synth": "square",
+  "hands_detected": 2,
+  "primary_handedness": "right",
+  "secondary_handedness": "left",
+  "brightness_source": "left",
   "code": "note(\"a#4\").s(\"square\").gain(0.35).lpf(1120)",
   "timestamp": 1760000000.0
 }
@@ -1691,7 +1788,7 @@ lpf = round(400 + brightness * 3600)
 Se ativo:
 
 ```text
-note("<nota>").s("square").gain(<gain>).lpf(<lpf>)
+note("<nota>").s("<synth>").gain(<gain>).lpf(<lpf>)
 ```
 
 Se inativo:
@@ -1706,7 +1803,7 @@ hush()
 
 ## 9.1 HandTracker
 
-- responsabilidade: converter camera em `HandFrame`
+- responsabilidade: converter camera em `HandsFrame`
 - nao sabe nada sobre som
 
 ## 9.2 MovementProcessor
@@ -1801,7 +1898,7 @@ Valida:
 
 ### Observacao importante
 
-Os testes de `StrudelPublisher` sobrescrevem `synth_name` para `"triangle"` em alguns cenarios. Isso nao altera o default do runtime do projeto, que hoje e `"square"`. Trata-se apenas de isolamento de teste.
+Os testes de `StrudelPublisher` sobrescrevem `synth_name` para `"triangle"` em alguns cenarios. Isso nao altera o default do runtime do projeto, que hoje e `"sawtooth"`. Trata-se apenas de isolamento de teste.
 
 ## 11.3 Validacao operacional manual
 
@@ -1822,7 +1919,7 @@ O fluxo manual esperado e:
 
 ## 12. Limitacoes Tecnicas Atuais
 
-1. O sistema trata apenas uma mao.
+1. O sistema captura ate duas maos e hoje distribui papeis entre elas, mas a segunda mao ainda atua apenas na camada de timbre/synth continuo, sem gerar eventos ou patterns temporais proprios.
 2. O frontend substitui o som por `hush() + play()` em vez de transicao suave.
 3. A nota e discreta, nao continua.
 4. O preview trafega como JPEG base64, o que aumenta payload.

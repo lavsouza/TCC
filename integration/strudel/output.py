@@ -8,7 +8,7 @@ from integration.strudel.preview_publisher import PreviewPublisher
 from integration.strudel.publisher import StrudelPublisher
 from integration.strudel.web_server import StrudelWebServer
 from utils.config import PROJECT_ROOT, StrudelConfig
-from utils.models import SoundParameters
+from utils.models import MotionFeatures, SoundParameters
 
 
 class StrudelOutput:
@@ -16,12 +16,17 @@ class StrudelOutput:
         self._config = config
         self._state_publisher = StrudelPublisher(config)
         self._preview_publisher = PreviewPublisher(config)
-        self._bridge = StrudelBridgeServer(config.ws_host, config.ws_port)
+        self._bridge = StrudelBridgeServer(
+            config.ws_host,
+            config.ws_port,
+            port_search_span=config.port_search_span,
+        )
         self._web_server = StrudelWebServer(
             host=config.http_host,
             port=config.http_port,
             directory=Path(PROJECT_ROOT / "web" / "strudel"),
-            ws_url=f"ws://{config.ws_host}:{config.ws_port}",
+            ws_url=self._bridge.ws_url,
+            port_search_span=config.port_search_span,
         )
 
     @property
@@ -38,6 +43,7 @@ class StrudelOutput:
 
         try:
             self._bridge.start()
+            self._web_server.set_ws_url(self._bridge.ws_url)
             self._web_server.start()
         except Exception as exc:
             self.stop()
@@ -46,11 +52,11 @@ class StrudelOutput:
         if self._config.auto_open_browser:
             webbrowser.open(self.web_url)
 
-    def publish_state(self, params: SoundParameters) -> None:
+    def publish_state(self, motion: MotionFeatures, params: SoundParameters) -> None:
         if not self.enabled:
             return
 
-        state = self._state_publisher.build_state(params)
+        state = self._state_publisher.build_state(params, motion)
         if not state.active and not self._config.send_inactive_state:
             return
 

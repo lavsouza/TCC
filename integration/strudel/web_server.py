@@ -16,9 +16,12 @@ class StrudelWebServer:
         port: int,
         directory: Path,
         ws_url: str,
+        port_search_span: int = 20,
     ) -> None:
         self._host = host
+        self._preferred_port = port
         self._port = port
+        self._port_search_span = max(port_search_span, 0)
         self._directory = directory
         self._ws_url = ws_url
         self._server: ThreadingHTTPServer | None = None
@@ -27,6 +30,9 @@ class StrudelWebServer:
     @property
     def base_url(self) -> str:
         return f"http://{self._host}:{self._port}"
+
+    def set_ws_url(self, ws_url: str) -> None:
+        self._ws_url = ws_url
 
     def start(self) -> None:
         if self._server is not None:
@@ -37,7 +43,23 @@ class StrudelWebServer:
             directory=str(self._directory),
             ws_url=self._ws_url,
         )
-        self._server = ThreadingHTTPServer((self._host, self._port), handler)
+        last_error: OSError | None = None
+        for candidate_port in _iter_candidate_ports(self._preferred_port, self._port_search_span):
+            try:
+                self._server = ThreadingHTTPServer((self._host, candidate_port), handler)
+                self._port = candidate_port
+                break
+            except OSError as exc:
+                last_error = exc
+
+        if self._server is None:
+            message = (
+                f"Servidor HTTP do Strudel nao conseguiu abrir uma porta a partir de {self._preferred_port}"
+            )
+            if last_error is not None:
+                raise RuntimeError(f"{message}: {last_error}") from last_error
+            raise RuntimeError(message)
+
         self._thread = threading.Thread(
             target=self._server.serve_forever,
             name="strudel-http-server",
@@ -78,3 +100,7 @@ class _StrudelRequestHandler(SimpleHTTPRequestHandler):
 
     def log_message(self, format: str, *args) -> None:
         del format, args
+
+
+def _iter_candidate_ports(start_port: int, span: int) -> list[int]:
+    return [start_port + offset for offset in range(span + 1)]

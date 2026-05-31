@@ -36,18 +36,18 @@ def main() -> int:
         print("[info] Abra a interface no navegador e use Ctrl+C no terminal para encerrar.")
 
         while True:
-            frame, hand_frame = tracker.read()
-            motion = processor.process(hand_frame)
+            frame, hands_frame = tracker.read()
+            motion = processor.process(hands_frame)
             sound_params = mapper.map(motion)
 
             overlay = render_overlay(
                 frame=frame,
-                hand_frame=hand_frame,
+                hand_frame=hands_frame,
                 motion=motion,
                 sound=sound_params,
                 title=config.ui.window_name,
             )
-            strudel_output.publish_state(sound_params)
+            strudel_output.publish_state(motion, sound_params)
             strudel_output.publish_preview(overlay)
 
         return 0

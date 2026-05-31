@@ -13,7 +13,7 @@ class CameraConfig:
     frame_width: int = 1280
     frame_height: int = 720
     mirror_feed: bool = True
-    max_num_hands: int = 1
+    max_num_hands: int = 2
     min_detection_confidence: float = 0.65
     min_presence_confidence: float = 0.5
     min_tracking_confidence: float = 0.55
@@ -31,6 +31,7 @@ class ProcessingConfig:
     openness_smoothing: float = 0.2
     velocity_reference: float = 1.3
     hand_span_reference: float = 2.2
+    primary_handedness: str = "right"
 
 
 @dataclass(slots=True)
@@ -42,6 +43,8 @@ class MappingConfig:
     max_amplitude: float = 0.65
     velocity_weight: float = 0.6
     openness_weight: float = 0.4
+    default_synth_name: str = "sawtooth"
+    secondary_synths: tuple[str, ...] = ("sine", "triangle", "sawtooth", "square")
 
 
 @dataclass(slots=True)
@@ -51,6 +54,7 @@ class StrudelConfig:
     ws_port: int = 8765
     http_host: str = "127.0.0.1"
     http_port: int = 8080
+    port_search_span: int = 20
     update_hz: int = 8
     note_change_immediate: bool = True
     gain_precision: int = 3

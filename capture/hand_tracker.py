@@ -8,7 +8,7 @@ import cv2
 import mediapipe as mp
 
 from utils.config import CameraConfig
-from utils.models import HandFrame, Landmark
+from utils.models import HandFrame, HandsFrame, Landmark
 
 
 class HandTracker:
@@ -19,7 +19,7 @@ class HandTracker:
         self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, config.frame_height)
         self._hands = self._create_landmarker(config)
 
-    def read(self) -> tuple[object, HandFrame | None]:
+    def read(self) -> tuple[object, HandsFrame | None]:
         ok, frame = self._capture.read()
         if not ok or frame is None:
             raise RuntimeError("Nao foi possivel ler um frame da camera.")
@@ -31,8 +31,8 @@ class HandTracker:
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
         timestamp_ms = int(time.perf_counter() * 1000)
         result = self._hands.detect_for_video(mp_image, timestamp_ms)
-        hand_frame = self._extract_hand(result)
-        return frame, hand_frame
+        hands_frame = self._extract_hands(result)
+        return frame, hands_frame
 
     def close(self) -> None:
         self._capture.release()
@@ -71,24 +71,35 @@ class HandTracker:
         return capture
 
     @staticmethod
-    def _extract_hand(result: object) -> HandFrame | None:
+    def _extract_hands(result: object) -> HandsFrame | None:
         landmarks_data = getattr(result, "hand_landmarks", None)
         if not landmarks_data:
             return None
 
-        first_hand = landmarks_data[0]
-        landmarks = [Landmark(x=point.x, y=point.y, z=point.z) for point in first_hand]
-
-        handedness = "unknown"
         handedness_data = getattr(result, "handedness", None)
-        if handedness_data:
-            handedness = handedness_data[0][0].category_name.lower()
+        frame_timestamp = time.perf_counter()
+        hands: list[HandFrame] = []
 
-        return HandFrame(
-            landmarks=landmarks,
-            handedness=handedness,
-            timestamp=time.perf_counter(),
-        )
+        for index, hand_landmarks in enumerate(landmarks_data):
+            landmarks = [
+                Landmark(x=point.x, y=point.y, z=point.z)
+                for point in hand_landmarks
+            ]
+
+            handedness = "unknown"
+            if handedness_data and index < len(handedness_data) and handedness_data[index]:
+                handedness = handedness_data[index][0].category_name.lower()
+
+            hands.append(
+                HandFrame(
+                    landmarks=landmarks,
+                    handedness=handedness,
+                    timestamp=frame_timestamp,
+                )
+            )
+
+        hands.sort(key=lambda hand: hand.anchor_x)
+        return HandsFrame(hands=hands, timestamp=frame_timestamp)
 
 
 def _ensure_model_file(model_path: Path, model_url: str) -> Path:

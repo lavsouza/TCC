@@ -13,6 +13,10 @@ class StrudelState:
     brightness: float
     lpf: int
     synth: str
+    hands_detected: int
+    primary_handedness: str
+    secondary_handedness: str
+    brightness_source: str
     code: str
     timestamp: float
 

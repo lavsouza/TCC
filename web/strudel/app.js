@@ -21,6 +21,10 @@ const fields = {
   lpf: document.getElementById("lpf-value"),
   synth: document.getElementById("synth-value"),
   active: document.getElementById("active-value"),
+  handsDetected: document.getElementById("hands-detected-value"),
+  primaryHand: document.getElementById("primary-hand-value"),
+  secondaryHand: document.getElementById("secondary-hand-value"),
+  brightnessSource: document.getElementById("brightness-source-value"),
 };
 
 async function loadConfig() {
@@ -46,6 +50,10 @@ function renderState(state) {
   fields.lpf.textContent = String(state.lpf);
   fields.synth.textContent = state.synth;
   fields.active.textContent = state.active ? "sim" : "nao";
+  fields.handsDetected.textContent = String(state.hands_detected);
+  fields.primaryHand.textContent = state.primary_handedness;
+  fields.secondaryHand.textContent = state.secondary_handedness;
+  fields.brightnessSource.textContent = state.brightness_source;
   codeView.textContent = state.code;
 }
 

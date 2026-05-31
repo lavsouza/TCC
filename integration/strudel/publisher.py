@@ -6,7 +6,7 @@ from integration.strudel.code_generator import build_code
 from integration.strudel.models import StrudelState
 from integration.strudel.note_adapter import to_strudel_note
 from utils.config import StrudelConfig
-from utils.models import SoundParameters
+from utils.models import MotionFeatures, SoundParameters
 
 
 class StrudelPublisher:
@@ -15,7 +15,11 @@ class StrudelPublisher:
         self._last_state: StrudelState | None = None
         self._last_publish_at = 0.0
 
-    def build_state(self, params: SoundParameters) -> StrudelState:
+    def build_state(
+        self,
+        params: SoundParameters,
+        motion: MotionFeatures | None = None,
+    ) -> StrudelState:
         active = params.active
         note_label = params.note_label if active else "--"
         strudel_note = to_strudel_note(note_label)
@@ -24,6 +28,16 @@ class StrudelPublisher:
         lpf = round(
             self._config.lpf_min
             + brightness * (self._config.lpf_max - self._config.lpf_min)
+        )
+        hands_detected = motion.hands_detected if motion is not None else 0
+        primary_handedness = motion.handedness if motion is not None and motion.active else "none"
+        secondary_handedness = (
+            motion.secondary_handedness if motion is not None and motion.has_secondary else "none"
+        )
+        brightness_source = (
+            secondary_handedness
+            if secondary_handedness != "none"
+            else primary_handedness
         )
 
         state = StrudelState(
@@ -34,7 +48,11 @@ class StrudelPublisher:
             gain=gain,
             brightness=brightness,
             lpf=lpf,
-            synth=self._config.synth_name,
+            synth=params.synth_name if active else self._config.synth_name,
+            hands_detected=hands_detected,
+            primary_handedness=primary_handedness,
+            secondary_handedness=secondary_handedness,
+            brightness_source=brightness_source,
             code="",
             timestamp=time.time(),
         )
@@ -55,6 +73,22 @@ class StrudelPublisher:
             self._config.note_change_immediate
             and state.note_label != self._last_state.note_label
         ):
+            self._remember(state, now)
+            return True
+
+        if state.synth != self._last_state.synth:
+            self._remember(state, now)
+            return True
+
+        if state.hands_detected != self._last_state.hands_detected:
+            self._remember(state, now)
+            return True
+
+        if state.primary_handedness != self._last_state.primary_handedness:
+            self._remember(state, now)
+            return True
+
+        if state.secondary_handedness != self._last_state.secondary_handedness:
             self._remember(state, now)
             return True
 

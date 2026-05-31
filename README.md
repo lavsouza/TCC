@@ -9,9 +9,9 @@ O projeto foi reorganizado em uma pipeline pequena separada em camadas:
 1. `capture/hand_tracker.py`
    Responsavel por abrir a camera, espelhar o feed e extrair landmarks da mao com MediaPipe.
 2. `processing/movement_processor.py`
-   Converte landmarks em features mais estaveis: posicao suavizada, velocidade do indicador e abertura entre polegar e indicador.
+   Converte landmarks em features mais estaveis por mao: posicao suavizada, velocidade do indicador e abertura entre polegar e indicador. A etapa atual produz uma mao primaria e uma secundaria quando ambas estao visiveis.
 3. `mapping/gesture_mapper.py`
-   Traduz as features em parametros musicais coerentes: nota, frequencia, amplitude e brilho.
+   Traduz as features em parametros musicais coerentes: a mao primaria controla nota e gain, enquanto a mao secundaria controla brilho e escolha do synth no Strudel.
 4. `integration/strudel/`
    Publica o estado musical do prototipo, gera o codigo Strudel equivalente e envia tudo para a interface web por HTTP + WebSocket.
 5. `utils/visualizer.py`
@@ -32,10 +32,11 @@ O detalhamento tecnico completo da implementacao atual esta em `docs/implementat
 
 ## Mapeamento atual
 
-- Movimento horizontal (eixo x) do indicador -> escolha de nota em escala pentatonica menor.
-- Movimento vertical (eixo y) do indicador -> gain.
-- Velocidade da mao -> brilho timbrico.
-- Abertura entre polegar e indicador -> influencia adicional no brilho.
+- Mao primaria: movimento horizontal (eixo x) do indicador -> escolha de nota em escala pentatonica menor.
+- Mao primaria: movimento vertical (eixo y) do indicador -> gain.
+- Mao secundaria: movimento horizontal (eixo x) -> escolha do synth entre `sine`, `triangle`, `sawtooth` e `square`.
+- Mao secundaria: velocidade + abertura entre polegar e indicador -> brilho timbrico, convertido depois em LPF no Strudel.
+- Se a mao secundaria nao estiver presente, o brilho volta a ser calculado pela mao primaria e o synth assume o default `sawtooth`.
 
 ## Instalacao
 
@@ -60,6 +61,8 @@ Ao iniciar:
 3. clique em `Conectar`
 4. clique em `Ativar Audio`
 
+Se `8080` ou `8765` estiverem ocupadas ou bloqueadas no Windows, o prototipo tenta automaticamente as proximas portas livres dentro de uma pequena faixa local e imprime a URL final no terminal.
+
 Para encerrar o prototipo, use `Ctrl+C` no terminal onde o backend Python esta rodando.
 
 ## Interface Browser-First
@@ -73,7 +76,16 @@ O prototipo agora funciona sem a janela local do OpenCV e sem o sintetizador loc
 
 Nesta versao, o sistema ainda trabalha com estado continuo e nao com patterns gestuais complexos.
 
+## Expansao Para Duas Maos
+
+- A captura agora aceita ate duas maos no MediaPipe.
+- O overlay visual ja desenha as duas maos quando elas estao presentes.
+- O backend informa qual mao esta sendo usada como mao primaria e qual esta atuando como mao secundaria.
+- A mao primaria controla nota e gain.
+- A mao secundaria controla brilho timbrico e escolha do synth do Strudel.
+- Na ausencia da mao secundaria, o sistema faz fallback para um modo de uma mao, preservando a tocabilidade do prototipo.
+
 ## Proximas etapas sugeridas
 
 - Definir eventos gestuais discretos para gerar patterns Strudel mais expressivos
-- Captura da segunda mao e definicao de quais parametros sonoros ela vai controlar
+- Expandir o papel da segunda mao para controlar eventos, patterns e modulacoes temporais mais complexas

@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+from pathlib import Path
+import socket
 import time
 import unittest
 
+from integration.strudel.bridge_server import StrudelBridgeServer
 from integration.strudel.note_adapter import to_strudel_note
 from integration.strudel.preview_publisher import PreviewPublisher
 from integration.strudel.publisher import StrudelPublisher
+from integration.strudel.web_server import StrudelWebServer
 import numpy as np
-from utils.config import StrudelConfig
-from utils.models import SoundParameters
+from utils.config import PROJECT_ROOT, StrudelConfig
+from utils.models import HandMotion, MotionFeatures, SoundParameters
 
 
 class NoteAdapterTests(unittest.TestCase):
@@ -40,19 +44,29 @@ class StrudelPublisherTests(unittest.TestCase):
             amplitude=0.35,
             brightness=0.20,
             note_label="A#4",
+            synth_name="square",
             active=True,
         )
+        motion = MotionFeatures(
+            primary=HandMotion(handedness="right", active=True),
+            secondary=HandMotion(handedness="left", active=True),
+            hands_detected=2,
+        )
 
-        state = self.publisher.build_state(params)
+        state = self.publisher.build_state(params, motion)
 
         self.assertTrue(state.active)
         self.assertEqual(state.note_label, "A#4")
         self.assertEqual(state.strudel_note, "a#4")
         self.assertEqual(state.gain, 0.35)
         self.assertEqual(state.lpf, 1120)
+        self.assertEqual(state.synth, "square")
+        self.assertEqual(state.primary_handedness, "right")
+        self.assertEqual(state.secondary_handedness, "left")
+        self.assertEqual(state.brightness_source, "left")
         self.assertEqual(
             state.code,
-            'note("a#4").s("triangle").gain(0.35).lpf(1120)',
+            'note("a#4").s("square").gain(0.35).lpf(1120)',
         )
 
     def test_build_state_turns_inactive_params_into_hush_code(self) -> None:
@@ -64,7 +78,7 @@ class StrudelPublisherTests(unittest.TestCase):
             active=False,
         )
 
-        state = self.publisher.build_state(params)
+        state = self.publisher.build_state(params, MotionFeatures())
 
         self.assertFalse(state.active)
         self.assertEqual(state.strudel_note, "~")
@@ -77,8 +91,10 @@ class StrudelPublisherTests(unittest.TestCase):
                 amplitude=0.25,
                 brightness=0.10,
                 note_label="C4",
+                synth_name="triangle",
                 active=True,
-            )
+            ),
+            MotionFeatures(primary=HandMotion(handedness="right", active=True), hands_detected=1),
         )
         second = self.publisher.build_state(
             SoundParameters(
@@ -86,8 +102,10 @@ class StrudelPublisherTests(unittest.TestCase):
                 amplitude=0.25,
                 brightness=0.10,
                 note_label="D4",
+                synth_name="triangle",
                 active=True,
-            )
+            ),
+            MotionFeatures(primary=HandMotion(handedness="right", active=True), hands_detected=1),
         )
 
         self.assertTrue(self.publisher.should_publish(first))
@@ -100,8 +118,10 @@ class StrudelPublisherTests(unittest.TestCase):
                 amplitude=0.25,
                 brightness=0.10,
                 note_label="C4",
+                synth_name="triangle",
                 active=True,
-            )
+            ),
+            MotionFeatures(primary=HandMotion(handedness="right", active=True), hands_detected=1),
         )
         subtle = self.publisher.build_state(
             SoundParameters(
@@ -109,8 +129,10 @@ class StrudelPublisherTests(unittest.TestCase):
                 amplitude=0.26,
                 brightness=0.12,
                 note_label="C4",
+                synth_name="triangle",
                 active=True,
-            )
+            ),
+            MotionFeatures(primary=HandMotion(handedness="right", active=True), hands_detected=1),
         )
 
         self.assertTrue(self.publisher.should_publish(first))
@@ -123,10 +145,70 @@ class StrudelPublisherTests(unittest.TestCase):
                 amplitude=0.26,
                 brightness=0.12,
                 note_label="C4",
+                synth_name="triangle",
                 active=True,
-            )
+            ),
+            MotionFeatures(primary=HandMotion(handedness="right", active=True), hands_detected=1),
         )
         self.assertTrue(self.publisher.should_publish(refreshed))
+
+    def test_should_publish_immediately_when_synth_changes(self) -> None:
+        first = self.publisher.build_state(
+            SoundParameters(
+                frequency=261.6,
+                amplitude=0.25,
+                brightness=0.10,
+                note_label="C4",
+                synth_name="triangle",
+                active=True,
+            ),
+            MotionFeatures(primary=HandMotion(handedness="right", active=True), hands_detected=1),
+        )
+        second = self.publisher.build_state(
+            SoundParameters(
+                frequency=261.6,
+                amplitude=0.25,
+                brightness=0.10,
+                note_label="C4",
+                synth_name="square",
+                active=True,
+            ),
+            MotionFeatures(primary=HandMotion(handedness="right", active=True), hands_detected=1),
+        )
+
+        self.assertTrue(self.publisher.should_publish(first))
+        self.assertTrue(self.publisher.should_publish(second))
+
+    def test_should_publish_immediately_when_secondary_hand_appears(self) -> None:
+        first = self.publisher.build_state(
+            SoundParameters(
+                frequency=261.6,
+                amplitude=0.25,
+                brightness=0.10,
+                note_label="C4",
+                synth_name="triangle",
+                active=True,
+            ),
+            MotionFeatures(primary=HandMotion(handedness="right", active=True), hands_detected=1),
+        )
+        second = self.publisher.build_state(
+            SoundParameters(
+                frequency=261.6,
+                amplitude=0.25,
+                brightness=0.10,
+                note_label="C4",
+                synth_name="triangle",
+                active=True,
+            ),
+            MotionFeatures(
+                primary=HandMotion(handedness="right", active=True),
+                secondary=HandMotion(handedness="left", active=True),
+                hands_detected=2,
+            ),
+        )
+
+        self.assertTrue(self.publisher.should_publish(first))
+        self.assertTrue(self.publisher.should_publish(second))
 
 
 class PreviewPublisherTests(unittest.TestCase):
@@ -154,6 +236,46 @@ class PreviewPublisherTests(unittest.TestCase):
 
         time.sleep(0.11)
         self.assertTrue(publisher.should_publish())
+
+
+class ServerFallbackTests(unittest.TestCase):
+    def test_web_server_falls_back_when_preferred_port_is_unavailable(self) -> None:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as occupied:
+            occupied.bind(("127.0.0.1", 0))
+            occupied.listen(1)
+            blocked_port = occupied.getsockname()[1]
+
+            server = StrudelWebServer(
+                host="127.0.0.1",
+                port=blocked_port,
+                directory=Path(PROJECT_ROOT / "web" / "strudel"),
+                ws_url="ws://127.0.0.1:9000",
+                port_search_span=10,
+            )
+
+            try:
+                server.start()
+                self.assertNotEqual(server.base_url, f"http://127.0.0.1:{blocked_port}")
+            finally:
+                server.stop()
+
+    def test_bridge_server_falls_back_when_preferred_port_is_unavailable(self) -> None:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as occupied:
+            occupied.bind(("127.0.0.1", 0))
+            occupied.listen(1)
+            blocked_port = occupied.getsockname()[1]
+
+            server = StrudelBridgeServer(
+                host="127.0.0.1",
+                port=blocked_port,
+                port_search_span=10,
+            )
+
+            try:
+                server.start()
+                self.assertNotEqual(server.port, blocked_port)
+            finally:
+                server.stop()
 
 
 if __name__ == "__main__":
