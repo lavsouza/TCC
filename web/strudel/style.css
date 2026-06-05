@@ -96,6 +96,29 @@ h2 {
   gap: 12px;
 }
 
+.preset-picker {
+  display: grid;
+  gap: 8px;
+  max-width: 320px;
+}
+
+.preset-picker label {
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+select {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: #fff8ef;
+  color: var(--ink);
+  font-size: 0.96rem;
+}
+
 button {
   border: 0;
   border-radius: 999px;
@@ -181,6 +204,7 @@ dd {
   margin: 8px 0 0;
   font-size: 1rem;
   font-weight: 600;
+  line-height: 1.45;
 }
 
 pre {

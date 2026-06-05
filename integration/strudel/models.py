@@ -17,6 +17,24 @@ class StrudelState:
     primary_handedness: str
     secondary_handedness: str
     brightness_source: str
+    gesture_phase: str
+    gesture_event: str
+    gesture_label: str
+    sweep_direction: str
+    pattern_mode: str
+    selected_preset: str
+    preset_name: str
+    preset_description: str
+    preset_source: str
+    emotion: str | None
+    emotion_source: str | None
+    preset_bpm: int
+    preset_rhythm: str
+    preset_default_synth: str
+    preset_scale_notes: tuple[str, ...]
+    preset_gain_scale: float
+    preset_filter_offset: int
+    preset_density: float
     code: str
     timestamp: float
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import hypot
 
+from processing.gesture_detector import PrimaryGestureDetector
 from utils.config import ProcessingConfig
 from utils.models import HandFrame, HandMotion, HandsFrame, MotionFeatures
 
@@ -22,6 +23,7 @@ class MovementProcessor:
     def __init__(self, config: ProcessingConfig) -> None:
         self._config = config
         self._hand_states: dict[str, _TrackedHandState] = {}
+        self._gesture_detector = PrimaryGestureDetector(config)
         self._active_handedness: str | None = None
 
     def process(self, hand_frame: HandFrame | HandsFrame | None) -> MotionFeatures:
@@ -32,6 +34,7 @@ class MovementProcessor:
 
         active_handedness = {hand.handedness for hand in hands}
         self._drop_stale_states(active_handedness)
+        self._gesture_detector.discard_missing(active_handedness)
 
         primary_hand = self._select_primary(hand_frame)
         if primary_hand is None:
@@ -45,11 +48,13 @@ class MovementProcessor:
             if secondary_hand is not None
             else HandMotion()
         )
+        gesture = self._gesture_detector.update(primary_motion)
 
         self._active_handedness = primary_hand.handedness
         return MotionFeatures(
             primary=primary_motion,
             secondary=secondary_motion,
+            gesture=gesture,
             hands_detected=len(hands),
         )
 
@@ -123,6 +128,7 @@ class MovementProcessor:
             velocity=smoothed_velocity,
             openness=smoothed_openness,
             handedness=hand.handedness,
+            timestamp=hand.timestamp,
             active=True,
         )
 
@@ -136,6 +142,7 @@ class MovementProcessor:
 
     def _reset(self) -> None:
         self._hand_states.clear()
+        self._gesture_detector.reset()
         self._active_handedness = None
 
     def _compute_velocity(

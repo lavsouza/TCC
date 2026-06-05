@@ -32,6 +32,13 @@ class ProcessingConfig:
     velocity_reference: float = 1.3
     hand_span_reference: float = 2.2
     primary_handedness: str = "right"
+    pinch_close_threshold: float = 0.17
+    pinch_open_threshold: float = 0.27
+    hold_min_duration: float = 0.45
+    sweep_velocity_threshold: float = 0.4
+    sweep_delta_x_threshold: float = 0.16
+    sweep_max_delta_y: float = 0.12
+    sweep_cooldown: float = 0.35
 
 
 @dataclass(slots=True)
@@ -45,6 +52,7 @@ class MappingConfig:
     openness_weight: float = 0.4
     default_synth_name: str = "sawtooth"
     secondary_synths: tuple[str, ...] = ("sine", "triangle", "sawtooth", "square")
+    pattern_modes: tuple[str, ...] = ("single", "pulse", "stutter")
 
 
 @dataclass(slots=True)

@@ -3,17 +3,25 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+from collections.abc import Callable
 from typing import Any
 
 import websockets
 
 
 class StrudelBridgeServer:
-    def __init__(self, host: str, port: int, port_search_span: int = 20) -> None:
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        port_search_span: int = 20,
+        message_handler: Callable[[dict[str, object]], None] | None = None,
+    ) -> None:
         self._host = host
         self._preferred_port = port
         self._port = port
         self._port_search_span = max(port_search_span, 0)
+        self._message_handler = message_handler
         self._clients: set[Any] = set()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._server_ready = threading.Event()
@@ -117,8 +125,8 @@ class StrudelBridgeServer:
     async def _handle_client(self, websocket) -> None:
         self._clients.add(websocket)
         try:
-            async for _ in websocket:
-                pass
+            async for message in websocket:
+                self._dispatch_message(message)
         finally:
             self._clients.discard(websocket)
 
@@ -140,6 +148,23 @@ class StrudelBridgeServer:
             except Exception:
                 pass
         self._clients.clear()
+
+    def _dispatch_message(self, message: str) -> None:
+        if self._message_handler is None:
+            return
+
+        try:
+            payload = json.loads(message)
+        except json.JSONDecodeError:
+            return
+
+        if not isinstance(payload, dict):
+            return
+
+        try:
+            self._message_handler(payload)
+        except Exception:
+            return
 
 
 def _iter_candidate_ports(start_port: int, span: int) -> list[int]:

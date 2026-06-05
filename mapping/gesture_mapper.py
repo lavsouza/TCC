@@ -11,8 +11,11 @@ class GestureMapper:
     def __init__(self, config: MappingConfig) -> None:
         self._config = config
         self._scale = self._build_scale()
+        self._pattern_mode_index = 0
 
     def map(self, motion: MotionFeatures) -> SoundParameters:
+        pattern_mode = self._update_pattern_mode(motion)
+
         if not motion.active:
             return SoundParameters(
                 frequency=0.0,
@@ -20,6 +23,11 @@ class GestureMapper:
                 brightness=0.0,
                 note_label="--",
                 synth_name=self._config.default_synth_name,
+                gesture_phase=motion.gesture_phase,
+                gesture_event=motion.gesture_event,
+                gesture_label=motion.gesture_label,
+                sweep_direction=motion.sweep_direction,
+                pattern_mode=pattern_mode,
                 active=False,
             )
 
@@ -43,6 +51,11 @@ class GestureMapper:
             brightness=brightness,
             note_label=note.label,
             synth_name=synth_name,
+            gesture_phase=motion.gesture_phase,
+            gesture_event=motion.gesture_event,
+            gesture_label=motion.gesture_label,
+            sweep_direction=motion.sweep_direction,
+            pattern_mode=pattern_mode,
             active=True,
         )
 
@@ -73,6 +86,17 @@ class GestureMapper:
 
         synth_index = round(secondary.x * (len(synths) - 1))
         return synths[synth_index]
+
+    def _update_pattern_mode(self, motion: MotionFeatures) -> str:
+        modes = self._config.pattern_modes
+        if not modes:
+            return "single"
+
+        if motion.gesture_event == "sweep":
+            step = 1 if motion.sweep_direction != "left" else -1
+            self._pattern_mode_index = (self._pattern_mode_index + step) % len(modes)
+
+        return modes[self._pattern_mode_index]
 
 
 def _midi_to_frequency(midi: int) -> float:

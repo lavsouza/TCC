@@ -22,6 +22,10 @@
           <button id="play-button" type="button">Ativar Audio</button>
           <button id="stop-button" type="button">Parar</button>
         </div>
+        <div class="preset-picker">
+          <label for="preset-select">Preset sonoro</label>
+          <select id="preset-select"></select>
+        </div>
         <p id="status-text" class="status">Carregando configuracao local...</p>
       </section>
 
@@ -92,6 +96,34 @@
             <div>
               <dt>Fonte do Brilho</dt>
               <dd id="brightness-source-value">none</dd>
+            </div>
+            <div>
+              <dt>Gesto</dt>
+              <dd id="gesture-label-value">idle</dd>
+            </div>
+            <div>
+              <dt>Evento</dt>
+              <dd id="gesture-event-value">none</dd>
+            </div>
+            <div>
+              <dt>Fase</dt>
+              <dd id="gesture-phase-value">idle</dd>
+            </div>
+            <div>
+              <dt>Pattern</dt>
+              <dd id="pattern-mode-value">single</dd>
+            </div>
+            <div>
+              <dt>Sweep</dt>
+              <dd id="sweep-direction-value">none</dd>
+            </div>
+            <div>
+              <dt>Preset</dt>
+              <dd id="preset-name-value">Neutral</dd>
+            </div>
+            <div>
+              <dt>Descricao</dt>
+              <dd id="preset-description-value">Aguardando preset...</dd>
             </div>
           </dl>
         </section>

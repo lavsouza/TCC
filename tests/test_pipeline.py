@@ -3,9 +3,10 @@ from __future__ import annotations
 import unittest
 
 from mapping.gesture_mapper import GestureMapper
+from processing.gesture_detector import PrimaryGestureDetector
 from processing.movement_processor import MovementProcessor
 from utils.config import MappingConfig, ProcessingConfig
-from utils.models import HandFrame, HandMotion, HandsFrame, Landmark, MotionFeatures
+from utils.models import GestureState, HandFrame, HandMotion, HandsFrame, Landmark, MotionFeatures
 
 
 def build_hand(
@@ -27,6 +28,28 @@ def build_hand(
 
 def build_hands_frame(*hands: HandFrame, timestamp: float) -> HandsFrame:
     return HandsFrame(hands=list(hands), timestamp=timestamp)
+
+
+def build_motion(
+    *,
+    x: float,
+    y: float,
+    velocity: float,
+    openness: float,
+    timestamp: float,
+    handedness: str = "right",
+) -> HandMotion:
+    return HandMotion(
+        raw_x=x,
+        raw_y=y,
+        x=x,
+        y=y,
+        velocity=velocity,
+        openness=openness,
+        handedness=handedness,
+        timestamp=timestamp,
+        active=True,
+    )
 
 
 class MovementProcessorTests(unittest.TestCase):
@@ -196,6 +219,86 @@ class GestureMapperTests(unittest.TestCase):
 
         self.assertEqual(sound.synth_name, "square")
         self.assertGreater(sound.brightness, 0.5)
+
+    def test_mapper_cycles_pattern_mode_when_sweep_happens(self) -> None:
+        mapper = GestureMapper(MappingConfig())
+        base_motion = MotionFeatures(
+            primary=HandMotion(x=0.35, y=0.25, velocity=0.1, openness=0.15, active=True),
+            gesture=GestureState(),
+            hands_detected=1,
+        )
+        sweep_motion = MotionFeatures(
+            primary=HandMotion(x=0.35, y=0.25, velocity=0.5, openness=0.15, active=True),
+            gesture=GestureState(event="sweep", sweep_direction="right"),
+            hands_detected=1,
+        )
+
+        first = mapper.map(base_motion)
+        second = mapper.map(sweep_motion)
+
+        self.assertEqual(first.pattern_mode, "single")
+        self.assertEqual(second.pattern_mode, "pulse")
+
+
+class PrimaryGestureDetectorTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.config = ProcessingConfig()
+        self.detector = PrimaryGestureDetector(self.config)
+
+    def test_detects_pinch_when_openness_closes(self) -> None:
+        self.detector.update(
+            build_motion(x=0.4, y=0.5, velocity=0.05, openness=0.35, timestamp=1.0)
+        )
+        gesture = self.detector.update(
+            build_motion(x=0.4, y=0.5, velocity=0.05, openness=0.12, timestamp=1.1)
+        )
+
+        self.assertEqual(gesture.event, "pinch")
+        self.assertEqual(gesture.phase, "pinch")
+
+    def test_detects_release_after_pinch_opens(self) -> None:
+        self.detector.update(
+            build_motion(x=0.4, y=0.5, velocity=0.05, openness=0.12, timestamp=1.0)
+        )
+        gesture = self.detector.update(
+            build_motion(x=0.42, y=0.5, velocity=0.05, openness=0.32, timestamp=1.2)
+        )
+
+        self.assertEqual(gesture.event, "release")
+        self.assertEqual(gesture.phase, "idle")
+
+    def test_detects_hold_after_minimum_pinch_duration(self) -> None:
+        self.detector.update(
+            build_motion(x=0.4, y=0.5, velocity=0.05, openness=0.12, timestamp=1.0)
+        )
+        gesture = self.detector.update(
+            build_motion(x=0.41, y=0.5, velocity=0.04, openness=0.11, timestamp=1.6)
+        )
+
+        self.assertEqual(gesture.event, "hold")
+        self.assertEqual(gesture.phase, "hold")
+
+    def test_detects_horizontal_sweep(self) -> None:
+        self.detector.update(
+            build_motion(x=0.2, y=0.5, velocity=0.05, openness=0.35, timestamp=1.0)
+        )
+        gesture = self.detector.update(
+            build_motion(x=0.45, y=0.52, velocity=0.55, openness=0.34, timestamp=1.15)
+        )
+
+        self.assertEqual(gesture.event, "sweep")
+        self.assertEqual(gesture.sweep_direction, "right")
+
+    def test_does_not_emit_false_positive_for_small_changes(self) -> None:
+        self.detector.update(
+            build_motion(x=0.4, y=0.5, velocity=0.05, openness=0.30, timestamp=1.0)
+        )
+        gesture = self.detector.update(
+            build_motion(x=0.46, y=0.56, velocity=0.18, openness=0.24, timestamp=1.1)
+        )
+
+        self.assertEqual(gesture.event, "none")
+        self.assertEqual(gesture.phase, "idle")
 
 
 if __name__ == "__main__":

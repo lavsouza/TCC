@@ -20,6 +20,7 @@ def render_overlay(
     sound: SoundParameters,
     title: str,
 ):
+    del sound, title
     overlay = frame.copy()
     frame_height, frame_width = overlay.shape[:2]
     hands = _normalize_hands(hand_frame)
@@ -32,59 +33,6 @@ def render_overlay(
             frame_height,
             is_primary=motion.active and hand.handedness == motion.handedness,
         )
-
-    if not hands:
-        status = "Aproxime uma mao da camera"
-        hands_status = "Maos detectadas: 0"
-    else:
-        label_text = ", ".join(hand.handedness for hand in hands)
-        status = "Mao detectada" if len(hands) == 1 else "Duas maos detectadas"
-        hands_status = f"Maos detectadas: {len(hands)} ({label_text})"
-
-    lines = [
-        title,
-        status,
-        hands_status,
-        f"Mao primaria: {motion.handedness if motion.active else 'nenhuma'} -> nota/gain",
-        (
-            f"Mao secundaria: {motion.secondary_handedness} -> brilho/synth"
-            if motion.has_secondary
-            else "Mao secundaria: indisponivel"
-        ),
-        "Saida ativa: navegador + Strudel",
-        f"Nota: {sound.note_label}",
-        f"Frequencia: {sound.frequency:.1f} Hz",
-        f"Amplitude: {sound.amplitude:.2f}",
-        f"Brilho: {sound.brightness:.2f}",
-        f"Synth: {sound.synth_name}",
-        f"Velocidade prim.: {motion.velocity:.2f}",
-        f"Abertura prim.: {motion.openness:.2f}",
-        (
-            f"Velocidade sec.: {motion.secondary.velocity:.2f}"
-            if motion.has_secondary
-            else "Velocidade sec.: --"
-        ),
-        (
-            f"Abertura sec.: {motion.secondary.openness:.2f}"
-            if motion.has_secondary
-            else "Abertura sec.: --"
-        ),
-        "Encerramento: Ctrl+C no terminal",
-    ]
-
-    y = 30
-    for line in lines:
-        cv2.putText(
-            overlay,
-            line,
-            (20, y),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.62,
-            (245, 245, 245),
-            2,
-            cv2.LINE_AA,
-        )
-        y += 28
 
     return overlay
 

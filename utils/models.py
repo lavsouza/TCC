@@ -79,13 +79,27 @@ class HandMotion:
     velocity: float = 0.0
     openness: float = 0.0
     handedness: str = "none"
+    timestamp: float = 0.0
     active: bool = False
+
+
+@dataclass(slots=True)
+class GestureState:
+    phase: str = "idle"
+    event: str = "none"
+    sweep_direction: str = "none"
+    timestamp: float = 0.0
+
+    @property
+    def label(self) -> str:
+        return self.event if self.event != "none" else self.phase
 
 
 @dataclass(slots=True)
 class MotionFeatures:
     primary: HandMotion = field(default_factory=HandMotion)
     secondary: HandMotion = field(default_factory=HandMotion)
+    gesture: GestureState = field(default_factory=GestureState)
     hands_detected: int = 0
 
     @property
@@ -128,6 +142,22 @@ class MotionFeatures:
     def secondary_handedness(self) -> str:
         return self.secondary.handedness
 
+    @property
+    def gesture_phase(self) -> str:
+        return self.gesture.phase
+
+    @property
+    def gesture_event(self) -> str:
+        return self.gesture.event
+
+    @property
+    def gesture_label(self) -> str:
+        return self.gesture.label
+
+    @property
+    def sweep_direction(self) -> str:
+        return self.gesture.sweep_direction
+
 
 @dataclass(slots=True, frozen=True)
 class ScaleNote:
@@ -143,4 +173,9 @@ class SoundParameters:
     brightness: float = 0.0
     note_label: str = "--"
     synth_name: str = "sawtooth"
+    gesture_phase: str = "idle"
+    gesture_event: str = "none"
+    gesture_label: str = "idle"
+    sweep_direction: str = "none"
+    pattern_mode: str = "single"
     active: bool = False

@@ -15,7 +15,7 @@ class StrudelWebServer:
         host: str,
         port: int,
         directory: Path,
-        ws_url: str,
+        config_payload: dict[str, object],
         port_search_span: int = 20,
     ) -> None:
         self._host = host
@@ -23,7 +23,7 @@ class StrudelWebServer:
         self._port = port
         self._port_search_span = max(port_search_span, 0)
         self._directory = directory
-        self._ws_url = ws_url
+        self._config_payload = dict(config_payload)
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
 
@@ -31,8 +31,8 @@ class StrudelWebServer:
     def base_url(self) -> str:
         return f"http://{self._host}:{self._port}"
 
-    def set_ws_url(self, ws_url: str) -> None:
-        self._ws_url = ws_url
+    def set_config_payload(self, payload: dict[str, object]) -> None:
+        self._config_payload = dict(payload)
 
     def start(self) -> None:
         if self._server is not None:
@@ -41,7 +41,7 @@ class StrudelWebServer:
         handler = partial(
             _StrudelRequestHandler,
             directory=str(self._directory),
-            ws_url=self._ws_url,
+            config_payload=self._config_payload,
         )
         last_error: OSError | None = None
         for candidate_port in _iter_candidate_ports(self._preferred_port, self._port_search_span):
@@ -80,15 +80,14 @@ class StrudelWebServer:
 
 
 class _StrudelRequestHandler(SimpleHTTPRequestHandler):
-    def __init__(self, *args, directory: str, ws_url: str, **kwargs) -> None:
-        self._ws_url = ws_url
+    def __init__(self, *args, directory: str, config_payload: dict[str, object], **kwargs) -> None:
+        self._config_payload = dict(config_payload)
         super().__init__(*args, directory=directory, **kwargs)
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
         if path == "/config.json":
-            payload = {"wsUrl": self._ws_url}
-            body = json.dumps(payload).encode("utf-8")
+            body = json.dumps(self._config_payload).encode("utf-8")
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
