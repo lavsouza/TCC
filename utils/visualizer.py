@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import cv2
 
-from utils.models import HandFrame, HandsFrame, MotionFeatures, SoundParameters
+from utils.models import HandFrame, HandsFrame, MotionFeatures
 
 HAND_CONNECTIONS = (
     (0, 1), (1, 2), (2, 3), (3, 4),
@@ -17,10 +17,7 @@ def render_overlay(
     frame,
     hand_frame: HandFrame | HandsFrame | None,
     motion: MotionFeatures,
-    sound: SoundParameters,
-    title: str,
 ):
-    del sound, title
     overlay = frame.copy()
     frame_height, frame_width = overlay.shape[:2]
     hands = _normalize_hands(hand_frame)

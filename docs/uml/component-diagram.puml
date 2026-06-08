@@ -59,7 +59,7 @@ StrudelOutput --> BridgeServer : publica payloads
 StrudelOutput --> WebServer : serve UI
 BridgeServer --> Browser : WebSocket
 WebServer --> Browser : HTTP
-Browser --> StrudelRuntime : executa codigo
+Browser --> StrudelRuntime : monta pattern e codigo\nexecuta Pattern
 
 Main --> HandTracker : read(), close()
 Main --> MovementProcessor : process()

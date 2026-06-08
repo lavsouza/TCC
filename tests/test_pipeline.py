@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import MagicMock, patch
 
+from capture.hand_tracker import HandTracker
 from mapping.gesture_mapper import GestureMapper
 from processing.gesture_detector import PrimaryGestureDetector
 from processing.movement_processor import MovementProcessor
-from utils.config import MappingConfig, ProcessingConfig
+from utils.config import CameraConfig, MappingConfig, ProcessingConfig
 from utils.models import GestureState, HandFrame, HandMotion, HandsFrame, Landmark, MotionFeatures
 
 
@@ -50,6 +52,23 @@ def build_motion(
         timestamp=timestamp,
         active=True,
     )
+
+
+class HandTrackerTests(unittest.TestCase):
+    @patch.object(HandTracker, "_create_landmarker", side_effect=RuntimeError("falha"))
+    @patch.object(HandTracker, "_open_capture")
+    def test_releases_camera_when_landmarker_initialization_fails(
+        self,
+        open_capture: MagicMock,
+        _create_landmarker: MagicMock,
+    ) -> None:
+        capture = MagicMock()
+        open_capture.return_value = capture
+
+        with self.assertRaisesRegex(RuntimeError, "falha"):
+            HandTracker(CameraConfig())
+
+        capture.release.assert_called_once_with()
 
 
 class MovementProcessorTests(unittest.TestCase):

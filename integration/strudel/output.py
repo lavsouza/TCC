@@ -5,7 +5,7 @@ from pathlib import Path
 
 from integration.strudel.bridge_server import StrudelBridgeServer
 from integration.strudel.preview_publisher import PreviewPublisher
-from integration.strudel.presets import default_preset, list_presets
+from integration.strudel.presets import list_emotion_profiles
 from integration.strudel.publisher import StrudelPublisher
 from integration.strudel.web_server import StrudelWebServer
 from utils.config import PROJECT_ROOT, StrudelConfig
@@ -84,21 +84,27 @@ class StrudelOutput:
         self._bridge.stop()
 
     def _build_frontend_config(self, ws_url: str) -> dict[str, object]:
-        presets = [preset.to_payload() for preset in list_presets()]
-        default_id = self._state_publisher.get_selected_preset()
-        if not default_id:
-            default_id = default_preset().id
+        profiles = [profile.to_payload() for profile in list_emotion_profiles()]
+        default_id = self._state_publisher.get_selected_profile()
 
         return {
             "wsUrl": ws_url,
-            "presets": presets,
+            "emotionProfiles": profiles,
+            "defaultEmotionId": default_id,
+            # Legacy keys allow older browser clients to keep loading.
+            "presets": profiles,
             "defaultPresetId": default_id,
         }
 
     def _handle_client_message(self, payload: dict[str, object]) -> None:
-        if payload.get("type") != "preset/select":
+        message_type = payload.get("type")
+        if message_type not in {"emotion/select", "preset/select"}:
             return
 
-        preset_id = payload.get("presetId")
-        if isinstance(preset_id, str):
-            self._state_publisher.set_selected_preset(preset_id)
+        profile_id = payload.get("emotionId", payload.get("presetId"))
+        if isinstance(profile_id, str):
+            self._state_publisher.set_selected_profile(
+                profile_id,
+                source="manual",
+                confidence=1.0,
+            )

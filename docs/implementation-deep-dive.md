@@ -24,6 +24,55 @@ O documento descreve a versao atual do prototipo, isto e, a versao `browser-firs
 
 ---
 
+## 1.1 Atualizacao: perfis expressivos e cenas multicamada
+
+A implementacao atual possui uma camada de `EmotionProfile` em
+`integration/strudel/presets.py`. Ela representa quatro categorias expressivas
+simuladas: `neutral`, `joy`, `sadness` e `anger`.
+
+Cada perfil define parametros configuraveis e aponta para uma `SceneRecipe`:
+
+- BPM e densidade;
+- intensidade e faixa permitida de gain;
+- faixa de LPF;
+- familia de synths;
+- conjunto sugerido de notas;
+- multiplos patterns ritmicos;
+- nivel de variacao;
+- tempo de transicao previsto.
+
+`integration/strudel/scenes.py` define a orquestracao de cada categoria por
+meio de `SceneRecipe`, `LayerRecipe` e `GestureRecipe`. As cenas atuais usam:
+
+- Neutro: melodia, baixo e bateria regulares;
+- Alegria: melodia palindromica, harmonia maior, baixo euclidiano, bateria e textura aguda;
+- Tristeza: melodia longa, harmonia menor, baixo lento, percussao esparsa e textura ambiente;
+- Raiva: repeticoes densas, baixo euclidiano, bateria agressiva e camada aguda distorcida.
+
+O arranjo e montado com `stack(...)`. O BPM e convertido para ciclos por minuto
+com `setcpm(bpm / beats_per_cycle)`, enquanto `density` continua controlando a
+quantidade temporal de eventos com `fast(density)`. Assim, tempo musical e
+densidade deixam de ser tratados como se fossem o mesmo parametro.
+
+A interface envia `emotion/select` pelo WebSocket. O backend resolve o perfil,
+combina seus limites com os parametros gestuais e devolve um `StrudelState`
+enriquecido. Nesta etapa:
+
+```text
+emotion_source = "manual"
+emotion_confidence = 1.0
+```
+
+Isso simula o contrato da futura classificacao automatica. Nao existe dataset
+ou classificador em execucao, e o sistema nao afirma reconhecer emocoes internas
+reais. A formulacao correta e reconhecimento futuro de padroes corporais
+associados a categorias expressivas representadas.
+
+O contrato preserva os campos legados `selected_preset` e `preset_*`, permitindo
+uma migracao incremental da primeira camada de presets.
+
+---
+
 ## 2. Snapshot Tecnologico Atual
 
 ### 2.1 Linguagem principal
@@ -39,7 +88,8 @@ O documento descreve a versao atual do prototipo, isto e, a versao `browser-firs
 
 ### 2.3 Dependencias JavaScript / navegador
 
-- `@strudel/web@1.0.3` carregado por CDN em `web/strudel/index.html`
+- `@strudel/web@1.3.0` carregado por CDN em `web/strudel/index.html`
+- Dirt Samples carregado por `samples("github:tidalcycles/dirt-samples")`
 - APIs nativas do navegador:
   - `WebSocket`
   - `fetch`
@@ -81,8 +131,8 @@ O documento descreve a versao atual do prototipo, isto e, a versao `browser-firs
 - `utils/models.py`
 - `utils/visualizer.py`
 - `integration/strudel/models.py`
+- `integration/strudel/scenes.py`
 - `integration/strudel/note_adapter.py`
-- `integration/strudel/code_generator.py`
 - `integration/strudel/publisher.py`
 - `integration/strudel/preview_publisher.py`
 - `integration/strudel/bridge_server.py`
@@ -201,7 +251,7 @@ Em cada iteracao:
 1. `tracker.read()` captura um frame da camera e tenta detectar ate duas maos;
 2. `processor.process(hands_frame)` transforma landmarks em features numericas;
 3. `mapper.map(motion)` converte features em parametros sonoros;
-4. `render_overlay(...)` desenha landmarks e informacoes textuais;
+4. `render_overlay(...)` desenha landmarks, indices e a identificacao das maos;
 5. `strudel_output.publish_state(motion, sound_params)` envia o estado musical enriquecido com o papel das duas maos;
 6. `strudel_output.publish_preview(overlay)` envia um preview JPEG do frame anotado.
 
@@ -340,9 +390,6 @@ Campos de publicacao do estado musical:
 - `gain_precision=3`
 - `gain_delta=0.03`
 - `brightness_delta=0.05`
-- `lpf_min=400`
-- `lpf_max=4000`
-- `synth_name="sawtooth"`
 - `send_inactive_state=True`
 
 Campos de publicacao do preview:
@@ -359,13 +406,7 @@ Observacao:
 
 - se as portas preferenciais estiverem ocupadas ou bloqueadas, os servidores HTTP e WebSocket tentam automaticamente as portas seguintes dentro da faixa definida por `port_search_span`.
 
-### 6.2.7 `UiConfig`
-
-- `window_name="MoveCodeBeats"`
-
-Mesmo sem janela local OpenCV, o nome ainda e usado como titulo no overlay textual e no frontend.
-
-### 6.2.8 `AppConfig`
+### 6.2.7 `AppConfig`
 
 Agrega:
 
@@ -373,9 +414,8 @@ Agrega:
 - `processing`
 - `mapping`
 - `strudel`
-- `ui`
 
-### 6.2.9 `load_config()`
+### 6.2.8 `load_config()`
 
 Atualmente:
 
@@ -743,19 +783,16 @@ Isto evita “memoria fantasma” quando a mao sai do quadro.
 
 Transformar `MotionFeatures` em `SoundParameters`.
 
-### 6.6.2 Observacao importante sobre constantes
+### 6.6.2 Constante de nomes musicais
 
 O modulo define:
 
 - `NOTE_NAMES`
-- `STRUDEL_NOTES`
 
-Na implementacao atual:
-
-- `NOTE_NAMES` e usado;
-- `STRUDEL_NOTES` esta declarado, mas nao participa do fluxo ativo.
-
-Ou seja, `STRUDEL_NOTES` e hoje um artefato residual/auxiliar nao utilizado.
+`NOTE_NAMES` converte o resto da divisao do MIDI por 12 no nome ocidental da
+nota. A antiga constante `STRUDEL_NOTES`, que nao participava do fluxo, foi
+removida; a conversao para a sintaxe do Strudel pertence exclusivamente a
+`integration/strudel/note_adapter.py`.
 
 ### 6.6.3 Escala musical
 
@@ -921,28 +958,11 @@ Passos:
 
 1. clona o frame (`frame.copy()`);
 2. calcula `frame_height` e `frame_width`;
-3. se houver mao, chama `_draw_hand()`;
-4. define `status`;
-5. monta lista `lines`;
-6. desenha cada linha com `cv2.putText()`;
-7. retorna a imagem anotada.
+3. normaliza o frame de uma ou duas maos para uma lista;
+4. chama `_draw_hand()` para cada mao detectada;
+5. retorna a imagem anotada sem bloco textual de parametros.
 
-### 6.7.4 Conteudo textual atual do overlay
-
-- titulo (`window_name`)
-- status da mao
-- mao primaria e mao secundaria
-- string fixa `Saida ativa: navegador + Strudel`
-- nota
-- frequencia
-- amplitude
-- brilho
-- synth
-- velocidade e abertura da mao primaria
-- velocidade e abertura da mao secundaria
-- instrucao de encerramento
-
-### 6.7.5 Desenho dos landmarks
+### 6.7.4 Desenho dos landmarks
 
 Para cada landmark:
 
@@ -953,7 +973,7 @@ Para cada landmark:
   - uma escura grossa como contorno;
   - uma branca fina por cima.
 
-### 6.7.6 Destaques visuais
+### 6.7.5 Destaques visuais
 
 - landmark `8` (indicador) recebe cor diferenciada;
 - landmarks `4` e `8` recebem raio maior.
@@ -1068,25 +1088,65 @@ O adapter aceita sustenidos e bemois, mas o mapper atual do backend emite susten
 
 ---
 
-## 6.10 `integration/strudel/code_generator.py`
+## 6.10 Geracao Strudel No Frontend
 
 ### 6.10.1 Papel
 
-Gerar uma representacao textual legivel do estado musical equivalente em Strudel.
+O codigo Strudel equivalente nao e mais gerado no Python. O backend envia um
+estado estruturado com perfil, cena, camadas, gesto, nota, gain, LPF e synth. O
+frontend usa `buildPatternExpression(...)` para gerar duas saidas a partir da
+mesma arvore de construcao:
+
+- `expression.value`: objeto Pattern executado por `strudelRepl.setPattern(...)`;
+- `expression.code`: representacao textual exibida em `<pre id="code-view">`.
 
 ### 6.10.2 Regras
 
-Se `state.active == False`:
+Se `state.active == False`, o texto exibido e:
 
 ```text
 hush()
 ```
 
-Se `state.active == True`:
+Se `state.active == True`, o construtor do frontend monta:
 
 ```text
-note("<strudel_note>").s("<synth>").gain(<gain>).lpf(<lpf>)
+setcpm(profile_bpm / scene_beats_per_cycle);
+
+stack(
+  camada_melodica,
+  camada_harmonica,
+  camada_de_baixo,
+  camada_percussiva,
+  camada_de_textura
+)
 ```
+
+Cada camada aplica apenas os recursos declarados em sua `LayerRecipe`, incluindo
+offset de nota, intervalos, gain relativo, LPF, HPF, ataque, release, room,
+delay, shape, distort, crush, panorama, velocidade, lentidao e ritmo euclidiano.
+
+Depois de `stack(...)`, a cena aplica `master_gain`. Esse parametro nao substitui
+o gain gestual: ele atua sobre a soma final para compensar a atenuacao causada
+pelos ganhos relativos de cada camada. Os valores atuais sao:
+
+- Neutro: `1.55`;
+- Alegria: `1.45`;
+- Tristeza: `1.75`;
+- Raiva: `1.25`.
+
+Raiva recebe menor reforco porque suas camadas usam `shape`, `distort` e maior
+densidade, apresentando mais energia e risco de saturacao.
+
+O `GestureRecipe` define respostas diferentes por perfil. Por exemplo, `hold`
+adiciona um brilho agudo em Alegria, um drone lento em Tristeza e uma camada de
+pressao distorcida em Raiva.
+
+O ponto e virgula depois de `setcpm(...)` e obrigatorio neste codigo exportado.
+Como o pattern seguinte comeca por parenteses, sua ausencia permite que o
+JavaScript interprete o trecho como `setcpm(...)(pattern)`, resultando em
+`setcpm(...) is not a function`. A funcao continua disponivel no Strudel atual;
+o erro anterior era de separacao entre as duas expressoes.
 
 ### 6.10.3 Observacao
 
@@ -1108,33 +1168,30 @@ Regras:
 active = params.active
 note_label = params.note_label se ativo; caso contrario "--"
 strudel_note = to_strudel_note(note_label)
-gain = round(params.amplitude, gain_precision) se ativo; caso contrario 0.0
+gain = clamp(params.amplitude * profile.intensity, profile.gain_range)
 brightness = round(params.brightness, 3) se ativo; caso contrario 0.0
-lpf = round(lpf_min + brightness * (lpf_max - lpf_min))
+lpf = round(
+    profile.lpf_range[0]
+    + brightness * (profile.lpf_range[1] - profile.lpf_range[0])
+)
 frequency = params.frequency se ativo; caso contrario 0.0
-synth = params.synth_name se ativo; caso contrario config.synth_name
+synth = params.synth_name com mao secundaria; caso contrario profile.default_synth
 timestamp = time.time()
-code = build_code(state)
+code = ""  # campo legado; o codigo executavel agora e derivado no frontend
 ```
 
 ### 6.11.3 Formula do LPF
 
 ```text
-lpf = round(400 + brightness * (4000 - 400))
+lpf = round(profile_lpf_min + brightness * (profile_lpf_max - profile_lpf_min))
 ```
 
-ou:
-
-```text
-lpf = round(400 + brightness * 3600)
-```
-
-Exemplo:
+Exemplo para o perfil Alegria, cuja faixa e `1600..7000`:
 
 - `brightness = 0.20`
-- `lpf = round(400 + 0.20 * 3600)`
-- `lpf = round(1120)`
-- `lpf = 1120`
+- `lpf = round(1600 + 0.20 * (7000 - 1600))`
+- `lpf = round(2680)`
+- `lpf = 2680`
 
 ### 6.11.4 Politica de publicacao
 
@@ -1289,13 +1346,13 @@ A ausencia de navegador conectado nao deve matar a captura da camera nem o pipel
 - consome passivamente mensagens de entrada;
 - descarta o cliente ao desconectar.
 
-Observacao:
+O protocolo atual e bidirecional:
 
-O protocolo atual e unidirecional em pratica:
+- servidor -> cliente: estado musical e preview;
+- cliente -> servidor: selecao manual do perfil expressivo.
 
-- servidor -> cliente
-
-As mensagens do cliente, se existirem, sao ignoradas.
+O backend valida `emotion/select`, normaliza aliases e usa `neutral` como
+fallback.
 
 ### 6.13.8 Broadcast
 
@@ -1417,7 +1474,7 @@ Definir a estrutura DOM da interface browser-first.
 ### 6.16.2 Dependencias front-end declaradas
 
 - `style.css`
-- `https://unpkg.com/@strudel/web@1.0.3`
+- `https://unpkg.com/@strudel/web@1.3.0`
 - `app.js`
 
 ### 6.16.3 Estrutura principal
@@ -1472,7 +1529,9 @@ Exibe:
 
 ### 6.16.8 `code-panel`
 
-Exibe o codigo Strudel equivalente dentro de `<pre id="code-view">`.
+Exibe o codigo Strudel equivalente dentro de `<pre id="code-view">`. Esse texto
+e gerado por `buildPatternCode(state)`, que chama o mesmo
+`buildPatternExpression(...)` usado para criar o Pattern executavel.
 
 ---
 
@@ -1518,7 +1577,8 @@ Cliente JavaScript que:
 - `lpf`
 - `synth`
 - `active`
-- `code`
+
+O campo legado `state.code` nao e mais usado pelo frontend.
 
 ### 6.17.5 Preview
 
@@ -1534,23 +1594,36 @@ Cliente JavaScript que:
 `ensureRuntime()`:
 
 - valida que `initStrudel` existe;
-- chama `Promise.resolve(initStrudel())`;
+- chama `initStrudel(...)` com uma funcao `prebake`;
+- o `prebake` carrega `github:tidalcycles/dirt-samples`;
+- guarda o objeto REPL retornado em `strudelRepl`;
+- valida a existencia de `setPattern()` e `setCps()`;
 - marca `runtimeReady=true`.
 
-Uso de `Promise.resolve(...)`:
+O carregamento explicito de samples e necessario porque `@strudel/web` nao
+carrega bancos externos por padrao. Sem ele, as camadas sintetizadas funcionam,
+mas eventos como `bd`, `sd`, `hh`, `cp`, `rim` e `oh` podem ficar silenciosos.
 
-- normaliza a chamada caso `initStrudel()` seja sync ou async.
+Uso de `Promise.resolve(...)` normaliza a inicializacao caso o retorno seja
+sincrono ou assincrono.
 
 ### 6.17.7 Construcao da pattern
 
 ```javascript
-note(state.strudel_note).s(state.synth).gain(state.gain).lpf(state.lpf)
+const expression = buildPatternExpression(state, true);
+codeView.textContent = expression.code;
+await strudelRepl.setPattern(expression.value, true);
 ```
 
 Observacao crucial:
 
+- `buildPatternExpression(...)` e a fonte unica para o Pattern executavel e para
+  o codigo textual exibido/copavel.
 - `state.frequency` nao e usada aqui.
 - O playback atual e baseado no token `note(...)`, nao em frequencia absoluta.
+- A mao primaria continua definindo a nota e o gain de referencia.
+- A mao secundaria continua definindo brilho e o synth da camada melodica.
+- As demais camadas recebem ganhos relativos para evitar que todas tenham o mesmo peso.
 
 ### 6.17.8 Aplicacao do estado musical
 
@@ -1559,20 +1632,89 @@ Observacao crucial:
 1. guarda `latestState`;
 2. atualiza os campos da UI;
 3. se runtime nao estiver pronto ou o audio nao estiver armado, para ali;
-4. se `active=false`, chama `hush()`;
-5. se `active=true`, chama:
-   - `hush()`
-   - `buildPattern(state).play()`
+4. se `active=false`, agenda uma parada tolerante a pequenas perdas de rastreio;
+5. se `active=true`, solicita uma atualizacao coalescida por `requestPatternUpdate()`;
+6. `flushPatternUpdates()` suaviza gain, LPF e brilho;
+7. ajusta CPS apenas quando o BPM muda;
+8. gera `expression = buildPatternExpression(state, true)`;
+9. atualiza o painel de codigo com `expression.code`;
+10. chama `strudelRepl.setPattern(expression.value, true)`.
 
 ### 6.17.9 Consequencia sonora importante
 
-O frontend atual substitui a pattern anterior agressivamente:
+O frontend nao usa mais:
 
 ```text
 hush() + nova pattern.play()
 ```
 
-Isso privilegia previsibilidade e simplicidade, mas nao suavidade de transicao.
+Esse fluxo reiniciava o scheduler a cada estado WebSocket e impedia que um
+ciclo ritmico fosse completado. Como o backend pode publicar oito estados por
+segundo, o pattern frequentemente voltava ao inicio antes de executar suas
+batidas posteriores.
+
+O fluxo atual usa:
+
+```text
+setPattern(novo_pattern, true)
+```
+
+Segundo o contrato do scheduler do Strudel, `setPattern` substitui a funcao
+consultada para os proximos eventos. Quando o scheduler ja esta iniciado, seu
+tempo nao e zerado. Isso preserva o ciclo e permite atualizar nota, gain, filtro,
+synth e gesto em tempo real.
+
+As atualizacoes sao coalescidas: se outro estado chegar enquanto uma troca esta
+em andamento, apenas o estado mais recente precisa ser aplicado em seguida.
+
+Para melhorar a continuidade perceptiva, existem dois intervalos:
+
+- `PRIORITY_UPDATE_MS = 45` para mudancas estruturais;
+- `CONTINUOUS_UPDATE_MS = 150` para modulacoes continuas.
+
+O frontend gera uma chave estrutural com perfil, modo de pattern, fase/evento
+gestual, direcao de sweep e synth. Mudancas nessa chave sao priorizadas. Nota,
+gain, brilho e LPF seguem o fluxo continuo para evitar reconstrucoes excessivas
+do pattern causadas por pequenas oscilacoes da camera.
+
+Gain, brilho e LPF sao suavizados pela formula:
+
+```text
+alpha = 1 - exp(-delta_t / transition_seconds)
+valor_suavizado = atual + (alvo - atual) * alpha
+```
+
+Essa formula torna a suavizacao dependente do tempo transcorrido e usa o
+`transition_seconds` do perfil. Tristeza converge mais lentamente; Raiva e
+Alegria respondem mais rapidamente.
+
+Quando a mao desaparece, o frontend espera `360 ms` antes de parar o scheduler.
+Se a deteccao retornar nesse intervalo, o corte e cancelado. Isso reduz
+interrupcoes causadas por oclusao, motion blur ou perda de landmarks em um
+numero pequeno de frames.
+
+### Estabilizacao especifica da cena Raiva
+
+Raiva utiliza uma taxa efetiva de atualizacao continua de `240 ms` e uma
+tolerancia de rastreamento de `520 ms`. A mudanca de synth nessa cena nao entra
+na chave de prioridade, evitando alternancias urgentes quando a mao secundaria
+oscila perto da fronteira entre dois synths.
+
+A densidade foi ajustada de `1.32` para `1.24`, e o modo basico deixou de
+adicionar uma segunda aceleracao global. A identidade continua rapida por causa
+do BPM 136, das subdivisoes internas e dos ritmos euclidianos.
+
+Os releases foram ampliados:
+
+- melodia: `0.18 s`;
+- baixo: `0.24 s`;
+- bateria: `0.16 s`;
+- textura aguda: `0.14 s`;
+- camada de hold: `0.18 s`.
+
+Essas caudas criam sobreposicao curta entre eventos consecutivos. O objetivo e
+remover microvazios e clicks perceptivos sem transformar a articulacao agressiva
+em uma textura sustentada.
 
 ### 6.17.10 Dispatch de payloads
 
@@ -1684,7 +1826,7 @@ Exemplo representativo:
   "primary_handedness": "right",
   "secondary_handedness": "left",
   "brightness_source": "left",
-  "code": "note(\"a#4\").s(\"square\").gain(0.35).lpf(1120)",
+  "code": "",
   "timestamp": 1760000000.0
 }
 ```
@@ -1896,10 +2038,6 @@ Valida:
 - geracao de `data:image/jpeg;base64,...` para o preview;
 - controle de taxa de publicacao do preview.
 
-### Observacao importante
-
-Os testes de `StrudelPublisher` sobrescrevem `synth_name` para `"triangle"` em alguns cenarios. Isso nao altera o default do runtime do projeto, que hoje e `"sawtooth"`. Trata-se apenas de isolamento de teste.
-
 ## 11.3 Validacao operacional manual
 
 O fluxo manual esperado e:
@@ -1912,7 +2050,7 @@ O fluxo manual esperado e:
 6. observar:
    - preview com landmarks;
    - estado textual mudando;
-   - codigo Strudel equivalente;
+   - codigo Strudel equivalente gerado no frontend;
    - resposta sonora do browser
 
 ---
@@ -1920,15 +2058,17 @@ O fluxo manual esperado e:
 ## 12. Limitacoes Tecnicas Atuais
 
 1. O sistema captura ate duas maos e hoje distribui papeis entre elas, mas a segunda mao ainda atua apenas na camada de timbre/synth continuo, sem gerar eventos ou patterns temporais proprios.
-2. O frontend substitui o som por `hush() + play()` em vez de transicao suave.
+2. Gain, brilho e LPF sao interpolados, mas ainda nao existe crossfade independente entre todas as camadas ao trocar de cena.
 3. A nota e discreta, nao continua.
 4. O preview trafega como JPEG base64, o que aumenta payload.
-5. Nao ha historico gestual longo para gerar patterns.
+5. Nao ha historico gestual longo para gerar frases ou estruturas de varios compassos.
 6. Nao ha persistencia de sessao nem gravação de gestos.
-7. O `WebSocket` e unidirecional na pratica.
+7. O perfil selecionado nao e persistido entre execucoes.
 8. O backend nao faz autenticacao local.
 9. `SoundParameters.frequency` e observacional no frontend atual.
 10. O browser precisa de gesto do usuario para liberar audio por politica de autoplay.
+11. `scale_notes` ainda e uma orientacao do perfil; a escala do `GestureMapper` nao e reconstruida dinamicamente nesta etapa.
+12. `transition_seconds` controla a suavizacao continua, mas ainda nao produz crossfade completo entre cenas.
 
 ---
 

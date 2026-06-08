@@ -44,17 +44,10 @@ package "utils.config" {
     +gain_precision: int
     +gain_delta: float
     +brightness_delta: float
-    +lpf_min: int
-    +lpf_max: int
-    +synth_name: str
     +send_inactive_state: bool
     +preview_update_hz: int
     +preview_jpeg_quality: int
     +preview_max_width: int
-  }
-
-  class UiConfig {
-    +window_name: str
   }
 
   class AppConfig {
@@ -62,7 +55,6 @@ package "utils.config" {
     +processing: ProcessingConfig
     +mapping: MappingConfig
     +strudel: StrudelConfig
-    +ui: UiConfig
   }
 }
 
@@ -126,13 +118,39 @@ package "integration.strudel.models" {
   }
 }
 
+package "integration.strudel.scenes" {
+  class SceneRecipe {
+    +id: str
+    +name: str
+    +beats_per_cycle: int
+    +layers: tuple[LayerRecipe]
+    +gesture: GestureRecipe
+  }
+
+  class LayerRecipe {
+    +id: str
+    +kind: str
+    +patterns: tuple[str, str, str]
+    +sound: str
+    +gain: float
+  }
+
+  class GestureRecipe {
+    +pinch_gain: float
+    +release_gain: float
+    +hold_layer: LayerRecipe
+    +sweep_left: str
+    +sweep_right: str
+  }
+}
+
 package "capture" {
   class HandTracker {
     -_config: CameraConfig
     -_capture
     -_hands
     +__init__(config: CameraConfig)
-    +read(): tuple[object, HandFrame | None]
+    +read(): tuple[object, HandsFrame | None]
     +close(): None
   }
 }
@@ -148,7 +166,7 @@ package "processing" {
     -_smoothed_velocity: float
     -_smoothed_openness: float
     +__init__(config: ProcessingConfig)
-    +process(hand_frame: HandFrame | None): MotionFeatures
+    +process(hand_frame: HandFrame | HandsFrame | None): MotionFeatures
   }
 }
 
@@ -198,7 +216,7 @@ package "integration.strudel" {
     +enabled: bool
     +web_url: str
     +start(): None
-    +publish_state(params: SoundParameters): None
+    +publish_state(motion: MotionFeatures, params: SoundParameters): None
     +publish_preview(overlay): None
     +stop(): None
   }
@@ -206,7 +224,7 @@ package "integration.strudel" {
 
 package "utils.visualizer" {
   class Visualizer <<utility>> {
-    +render_overlay(frame, hand_frame, motion, sound, title)
+    +render_overlay(frame, hand_frame, motion)
   }
 }
 
@@ -214,7 +232,6 @@ AppConfig *-- CameraConfig
 AppConfig *-- ProcessingConfig
 AppConfig *-- MappingConfig
 AppConfig *-- StrudelConfig
-AppConfig *-- UiConfig
 
 HandFrame *-- "21" Landmark
 GestureMapper *-- ScaleNote
@@ -234,6 +251,10 @@ GestureMapper --> SoundParameters
 StrudelPublisher --> StrudelConfig
 StrudelPublisher --> SoundParameters
 StrudelPublisher --> StrudelState
+StrudelPublisher --> SceneRecipe
+SceneRecipe *-- LayerRecipe
+SceneRecipe *-- GestureRecipe
+GestureRecipe --> LayerRecipe : hold
 PreviewPublisher --> StrudelConfig
 PreviewPublisher --> PreviewFrame
 StrudelOutput --> StrudelConfig

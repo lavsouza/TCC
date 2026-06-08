@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import time
-
-from integration.strudel.code_generator import build_code
 from integration.strudel.models import StrudelState
 from integration.strudel.note_adapter import to_strudel_note
-from integration.strudel.presets import default_preset, get_preset
+from integration.strudel.presets import (
+    get_default_emotion_profile,
+    get_emotion_profile,
+    select_rhythm_pattern,
+)
+from integration.strudel.scenes import get_scene, resolve_scene_payload
 from utils.config import StrudelConfig
 from utils.models import MotionFeatures, SoundParameters
 
@@ -13,34 +16,52 @@ from utils.models import MotionFeatures, SoundParameters
 class StrudelPublisher:
     def __init__(self, config: StrudelConfig) -> None:
         self._config = config
-        self._selected_preset_id = default_preset().id
+        self._selected_profile_id = get_default_emotion_profile().id
+        self._emotion_source = "manual"
+        self._emotion_confidence = 1.0
         self._last_state: StrudelState | None = None
         self._last_publish_at = 0.0
 
+    def set_selected_profile(
+        self,
+        profile_id: str | None,
+        *,
+        source: str = "manual",
+        confidence: float = 1.0,
+    ) -> None:
+        self._selected_profile_id = get_emotion_profile(profile_id).id
+        self._emotion_source = source
+        self._emotion_confidence = _clamp(confidence, 0.0, 1.0)
+
+    def get_selected_profile(self) -> str:
+        return self._selected_profile_id
+
     def set_selected_preset(self, preset_id: str | None) -> None:
-        self._selected_preset_id = get_preset(preset_id).id
+        self.set_selected_profile(preset_id)
 
     def get_selected_preset(self) -> str:
-        return self._selected_preset_id
+        return self.get_selected_profile()
 
     def build_state(
         self,
         params: SoundParameters,
         motion: MotionFeatures | None = None,
     ) -> StrudelState:
-        preset = get_preset(self._selected_preset_id)
+        profile = get_emotion_profile(self._selected_profile_id)
         active = params.active
         note_label = params.note_label if active else "--"
         strudel_note = to_strudel_note(note_label)
-        gain = round(
-            (params.amplitude if active else 0.0) * preset.gain_scale,
-            self._config.gain_precision,
-        )
+        gain = 0.0
+        if active:
+            gain = round(
+                _clamp(
+                    params.amplitude * profile.intensity,
+                    profile.gain_range[0],
+                    profile.gain_range[1],
+                ),
+                self._config.gain_precision,
+            )
         brightness = round(params.brightness if active else 0.0, 3)
-        base_lpf = round(
-            self._config.lpf_min
-            + brightness * (self._config.lpf_max - self._config.lpf_min)
-        )
         hands_detected = motion.hands_detected if motion is not None else 0
         primary_handedness = motion.handedness if motion is not None and motion.active else "none"
         secondary_handedness = (
@@ -51,15 +72,18 @@ class StrudelPublisher:
             if secondary_handedness != "none"
             else primary_handedness
         )
-        lpf = max(
-            self._config.lpf_min,
-            min(self._config.lpf_max + 1200, base_lpf + preset.filter_offset),
+        lpf = round(
+            profile.lpf_range[0]
+            + brightness * (profile.lpf_range[1] - profile.lpf_range[0])
         )
         effective_synth = (
             params.synth_name
             if active and secondary_handedness != "none"
-            else preset.default_synth
+            else profile.default_synth
         )
+        rhythm_pattern = select_rhythm_pattern(profile, params.pattern_mode)
+        scene = resolve_scene_payload(get_scene(profile.id), params.pattern_mode)
+        scene_layers = tuple(layer["id"] for layer in scene["layers"])
 
         state = StrudelState(
             active=active,
@@ -69,7 +93,7 @@ class StrudelPublisher:
             gain=gain,
             brightness=brightness,
             lpf=lpf,
-            synth=effective_synth if active else preset.default_synth,
+            synth=effective_synth if active else profile.default_synth,
             hands_detected=hands_detected,
             primary_handedness=primary_handedness,
             secondary_handedness=secondary_handedness,
@@ -79,23 +103,43 @@ class StrudelPublisher:
             gesture_label=params.gesture_label,
             sweep_direction=params.sweep_direction,
             pattern_mode=params.pattern_mode,
-            selected_preset=preset.id,
-            preset_name=preset.name,
-            preset_description=preset.description,
-            preset_source="manual",
-            emotion=None,
-            emotion_source=None,
-            preset_bpm=preset.bpm,
-            preset_rhythm=preset.rhythm_pattern,
-            preset_default_synth=preset.default_synth,
-            preset_scale_notes=preset.scale_notes,
-            preset_gain_scale=preset.gain_scale,
-            preset_filter_offset=preset.filter_offset,
-            preset_density=preset.density,
+            emotion=profile.emotion,
+            emotion_label=profile.label,
+            emotion_source=self._emotion_source,
+            emotion_confidence=self._emotion_confidence,
+            selected_profile=profile.id,
+            profile_name=profile.label,
+            profile_description=profile.description,
+            profile_bpm=profile.bpm,
+            profile_density=profile.density,
+            profile_intensity=profile.intensity,
+            profile_variation=profile.variation,
+            profile_gain_range=profile.gain_range,
+            profile_lpf_range=profile.lpf_range,
+            profile_synth_family=profile.synth_family,
+            profile_scale_notes=profile.scale_notes,
+            profile_rhythm_patterns=profile.rhythm_patterns,
+            profile_rhythm=rhythm_pattern,
+            profile_transition_seconds=profile.transition_seconds,
+            scene=scene,
+            scene_name=str(scene["name"]),
+            scene_description=str(scene["description"]),
+            scene_layers=scene_layers,
+            scene_beats_per_cycle=int(scene["beats_per_cycle"]),
+            selected_preset=profile.id,
+            preset_name=profile.label,
+            preset_description=profile.description,
+            preset_source=self._emotion_source,
+            preset_bpm=profile.bpm,
+            preset_rhythm=rhythm_pattern,
+            preset_default_synth=profile.default_synth,
+            preset_scale_notes=profile.scale_notes,
+            preset_gain_scale=profile.gain_scale,
+            preset_filter_offset=profile.filter_offset,
+            preset_density=profile.density,
             code="",
             timestamp=time.time(),
         )
-        state.code = build_code(state)
         return state
 
     def should_publish(self, state: StrudelState) -> bool:
@@ -104,46 +148,7 @@ class StrudelPublisher:
             self._remember(state, now)
             return True
 
-        if state.active != self._last_state.active:
-            self._remember(state, now)
-            return True
-
-        if (
-            self._config.note_change_immediate
-            and state.note_label != self._last_state.note_label
-        ):
-            self._remember(state, now)
-            return True
-
-        if state.synth != self._last_state.synth:
-            self._remember(state, now)
-            return True
-
-        if state.hands_detected != self._last_state.hands_detected:
-            self._remember(state, now)
-            return True
-
-        if state.primary_handedness != self._last_state.primary_handedness:
-            self._remember(state, now)
-            return True
-
-        if state.secondary_handedness != self._last_state.secondary_handedness:
-            self._remember(state, now)
-            return True
-
-        if state.gesture_phase != self._last_state.gesture_phase:
-            self._remember(state, now)
-            return True
-
-        if state.gesture_event != self._last_state.gesture_event:
-            self._remember(state, now)
-            return True
-
-        if state.pattern_mode != self._last_state.pattern_mode:
-            self._remember(state, now)
-            return True
-
-        if state.selected_preset != self._last_state.selected_preset:
+        if self._has_immediate_change(state):
             self._remember(state, now)
             return True
 
@@ -169,3 +174,40 @@ class StrudelPublisher:
     def _remember(self, state: StrudelState, now: float) -> None:
         self._last_state = state
         self._last_publish_at = now
+
+    def _has_immediate_change(self, state: StrudelState) -> bool:
+        previous = self._last_state
+        if previous is None:
+            return True
+
+        note_changed = (
+            self._config.note_change_immediate
+            and state.note_label != previous.note_label
+        )
+        structural_state = (
+            state.active,
+            state.synth,
+            state.hands_detected,
+            state.primary_handedness,
+            state.secondary_handedness,
+            state.gesture_phase,
+            state.gesture_event,
+            state.pattern_mode,
+            state.selected_profile,
+        )
+        previous_structural_state = (
+            previous.active,
+            previous.synth,
+            previous.hands_detected,
+            previous.primary_handedness,
+            previous.secondary_handedness,
+            previous.gesture_phase,
+            previous.gesture_event,
+            previous.pattern_mode,
+            previous.selected_profile,
+        )
+        return note_changed or structural_state != previous_structural_state
+
+
+def _clamp(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, value))

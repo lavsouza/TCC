@@ -27,7 +27,7 @@ loop enquanto a aplicacao estiver em execucao
   HandTracker -> Camera : read()
   Camera --> HandTracker : frame
   HandTracker -> HandTracker : espelha frame\nconverte BGR -> RGB\nexecuta MediaPipe
-  HandTracker --> Main : frame, HandFrame | None
+  HandTracker --> Main : frame, HandsFrame | None
   deactivate HandTracker
 
   Main -> MovementProcessor : process(hand_frame)
@@ -42,13 +42,13 @@ loop enquanto a aplicacao estiver em execucao
   GestureMapper --> Main : SoundParameters
   deactivate GestureMapper
 
-  Main -> Visualizer : render_overlay(frame,\nhand_frame, motion, sound)
+  Main -> Visualizer : render_overlay(frame,\nhand_frame, motion)
   activate Visualizer
-  Visualizer -> Visualizer : desenha landmarks,\nindices e texto
+  Visualizer -> Visualizer : desenha landmarks,\nindices e identificacao
   Visualizer --> Main : overlay anotado
   deactivate Visualizer
 
-  Main -> StrudelOutput : publish_state(sound_params)
+  Main -> StrudelOutput : publish_state(motion, sound_params)
   activate StrudelOutput
   StrudelOutput -> BridgeServer : payload type=state
   BridgeServer -> Browser : JSON com nota,\ngain, brilho e codigo

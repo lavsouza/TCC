@@ -15,9 +15,13 @@ class HandTracker:
     def __init__(self, config: CameraConfig) -> None:
         self._config = config
         self._capture = self._open_capture(config.device_index)
-        self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, config.frame_width)
-        self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, config.frame_height)
-        self._hands = self._create_landmarker(config)
+        try:
+            self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, config.frame_width)
+            self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, config.frame_height)
+            self._hands = self._create_landmarker(config)
+        except Exception:
+            self._capture.release()
+            raise
 
     def read(self) -> tuple[object, HandsFrame | None]:
         ok, frame = self._capture.read()

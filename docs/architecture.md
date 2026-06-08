@@ -14,12 +14,14 @@ flowchart LR
     camera --> capture["Camada de Captura<br/>capture/hand_tracker.py"]
     capture --> processing["Camada de Processamento<br/>processing/movement_processor.py"]
     processing --> mapping["Camada de Mapeamento Musical<br/>mapping/gesture_mapper.py"]
-    mapping --> strudel["Camada de Saida Web<br/>integration/strudel/"]
+    mapping --> profiles["Perfis Expressivos Parametricos<br/>integration/strudel/presets.py"]
+    profiles --> strudel["Camada de Saida Web<br/>integration/strudel/"]
     capture --> visualizer["Camada de Visualizacao<br/>utils/visualizer.py"]
     processing --> visualizer
     mapping --> visualizer
     visualizer --> strudel
     strudel --> browser["Navegador<br/>Preview + Codigo + Strudel"]
+    browser -->|"selecao manual"| profiles
 
     config["Configuracao Central<br/>utils/config.py"] --> capture
     config --> processing
@@ -53,6 +55,8 @@ sequenceDiagram
     participant O as StrudelOutput
     participant B as Browser
 
+    B->>O: Seleciona categoria expressiva simulada
+    O->>O: Resolve EmotionProfile e fonte manual
     U->>C: Movimenta a mao em frente a camera
     C->>H: Entrega frame de video
     H->>H: Detecta landmarks com MediaPipe
@@ -61,6 +65,7 @@ sequenceDiagram
     P->>M: MotionFeatures
     M->>M: Traduz gesto para parametros sonoros
     M->>O: SoundParameters
+    O->>O: Combina movimento + perfil parametrico
     H->>V: Frame + landmarks
     P->>V: Features processadas
     M->>V: Nota, frequencia, brilho e estado
@@ -76,8 +81,8 @@ sequenceDiagram
 - `capture/hand_tracker.py`: abre a camera, prepara o modelo do MediaPipe, detecta a mao e converte o resultado para a estrutura `HandFrame`.
 - `processing/movement_processor.py`: transforma landmarks em features semanticas mais estaveis, como posicao suavizada, velocidade e abertura da mao.
 - `mapping/gesture_mapper.py`: traduz essas features em parametros musicais e acusticos, como nota, frequencia, amplitude e brilho.
-- `integration/strudel/`: publica o estado Strudel, gera o codigo equivalente, expande o preview da camera e entrega tudo para o navegador.
-- `utils/visualizer.py`: desenha a malha da mao, os indices dos landmarks e os valores principais do sistema para depuracao e demonstracao.
+- `integration/strudel/`: publica o estado Strudel estruturado, expande o preview da camera e entrega tudo para o navegador.
+- `utils/visualizer.py`: desenha a malha da mao, os indices dos landmarks e a identificacao das maos para depuracao e demonstracao.
 - `utils/config.py`: centraliza os parametros configuraveis do sistema.
 - `utils/models.py`: define as estruturas de dados trocadas entre as camadas.
 - `tests/`: valida partes importantes da logica sem depender de camera real.
@@ -89,11 +94,15 @@ flowchart TD
     raw["Frame da camera"] --> hand["HandFrame<br/>landmarks + handedness + timestamp"]
     hand --> motion["MotionFeatures<br/>x, y, velocidade, abertura"]
     motion --> sound["SoundParameters<br/>frequencia, amplitude, brilho"]
-    sound --> state["StrudelState<br/>note, gain, lpf, codigo"]
+    emotion["Selecao manual<br/>neutral, joy, sadness, anger"] --> profile["EmotionProfile<br/>faixas, ritmo, synths, variacao"]
+    profile --> scene["SceneRecipe<br/>melodia, harmonia, baixo, bateria, textura"]
+    scene --> state
+    sound --> state["StrudelState<br/>gesto + perfil + cena"]
     raw --> overlay["Overlay visual<br/>camera + anotacoes"]
     overlay --> preview["PreviewFrame<br/>JPEG + metadados"]
     state --> browser["Navegador"]
     preview --> browser
+    browser --> code["Codigo Strudel<br/>derivado no frontend"]
 ```
 
 ## Justificativa Arquitetural
@@ -102,3 +111,6 @@ flowchart TD
 - O uso de estruturas de dados intermediarias torna o fluxo claro e testavel.
 - A centralizacao da interface no navegador aproxima o prototipo da ideia central de integracao com Strudel.
 - A remocao do sintetizador local reduz redundancia e concentra a evolucao do projeto na traducao gesto -> codigo executavel.
+- A selecao manual de categoria fica desacoplada da regra musical, permitindo que um classificador substitua essa origem no futuro sem alterar o gerador Strudel.
+- As cenas sao declarativas e deterministicas: o mesmo perfil e estado produzem a mesma receita, permitindo testes e comparacoes controladas.
+- O frontend compila a cena estruturada sem conhecer as regras de classificacao ou deteccao gestual.

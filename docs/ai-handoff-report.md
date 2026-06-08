@@ -217,7 +217,8 @@ Dependencias Python declaradas em [requirements.txt](/C:/Users/lucas/OneDrive/Fa
 
 Dependencia principal do frontend:
 
-- `@strudel/web@1.0.3` via CDN em [web/strudel/index.html](/C:/Users/lucas/OneDrive/Faculdade%20e%20Carreira/Faculdade%202026.1/Tcc%202/MoveCodeBeats/web/strudel/index.html)
+- `@strudel/web@1.3.0` via CDN em [web/strudel/index.html](/C:/Users/lucas/OneDrive/Faculdade%20e%20Carreira/Faculdade%202026.1/Tcc%202/MoveCodeBeats/web/strudel/index.html)
+- Dirt Samples carregado explicitamente para as camadas de bateria
 
 Bibliotecas nativas importantes usadas no Python:
 
@@ -426,6 +427,9 @@ Campos:
 - `code`
 - `timestamp`
 
+`code` permanece no payload como campo legado, mas o valor executavel/textual
+passou a ser gerado no frontend pelo mesmo construtor que toca o Strudel.
+
 ---
 
 ## 9. Como O Sistema Funciona Hoje
@@ -601,14 +605,11 @@ Transformacoes importantes:
 ### Formula do LPF
 
 ```text
-lpf = round(lpf_min + brightness * (lpf_max - lpf_min))
+lpf = round(profile_lpf_min + brightness * (profile_lpf_max - profile_lpf_min))
 ```
 
-Com defaults:
-
-```text
-lpf = round(400 + brightness * 3600)
-```
+Os limites sao definidos pelo perfil expressivo ativo. Assim, o mesmo valor de
+brilho produz filtros diferentes em Neutro, Alegria, Tristeza e Raiva.
 
 ### Politica de publicacao
 
@@ -733,7 +734,7 @@ note(state.strudel_note).s(state.synth).gain(state.gain).lpf(state.lpf)
 - mute sem mao;
 - mapeamento da mao secundaria para brilho/synth;
 - conversao de nota para Strudel;
-- geracao do codigo Strudel equivalente;
+- geracao do estado estruturado usado pelo frontend para montar Pattern e codigo;
 - throttle da publicacao de estado;
 - throttle do preview;
 - fallback de portas para HTTP e WebSocket.
@@ -754,7 +755,7 @@ Isso foi corrigido por fallback automatico de porta. Em um smoke test recente, a
 ## 13. Limitacoes E Debitos Tecnicos Atuais
 
 1. O sistema ainda trabalha com `estado continuo`, nao com `patterns` temporais ricos.
-2. O frontend toca um estado por vez e usa `hush()` antes de tocar o proximo.
+2. O frontend usa `buildPatternExpression(...)` como fonte unica para o Pattern executavel e para o codigo exibido, e substitui o pattern com `setPattern()` sem reiniciar o scheduler; ainda nao ha crossfade entre cenas.
 3. Nao ha transicao sonora mais sofisticada no Strudel.
 4. O preview trafega como JPEG base64, o que pode ser pesado.
 5. Nao ha calibracao por usuario.

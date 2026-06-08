@@ -44,8 +44,6 @@ def main() -> int:
                 frame=frame,
                 hand_frame=hands_frame,
                 motion=motion,
-                sound=sound_params,
-                title=config.ui.window_name,
             )
             strudel_output.publish_state(motion, sound_params)
             strudel_output.publish_preview(overlay)

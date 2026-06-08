@@ -68,9 +68,6 @@ class StrudelConfig:
     gain_precision: int = 3
     gain_delta: float = 0.03
     brightness_delta: float = 0.05
-    lpf_min: int = 400
-    lpf_max: int = 4000
-    synth_name: str = "sawtooth"
     auto_open_browser: bool = False
     send_inactive_state: bool = True
     preview_update_hz: int = 12
@@ -79,17 +76,11 @@ class StrudelConfig:
 
 
 @dataclass(slots=True)
-class UiConfig:
-    window_name: str = "MoveCodeBeats"
-
-
-@dataclass(slots=True)
 class AppConfig:
     camera: CameraConfig = field(default_factory=CameraConfig)
     processing: ProcessingConfig = field(default_factory=ProcessingConfig)
     mapping: MappingConfig = field(default_factory=MappingConfig)
     strudel: StrudelConfig = field(default_factory=StrudelConfig)
-    ui: UiConfig = field(default_factory=UiConfig)
 
 
 def load_config() -> AppConfig:

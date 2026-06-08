@@ -2,11 +2,14 @@
 <html lang="pt-BR">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
     <title>MoveCodeBeats + Strudel</title>
-    <link rel="stylesheet" href="./style.css" />
-    <script src="https://unpkg.com/@strudel/web@1.0.3"></script>
-    <script defer src="./app.js"></script>
+    <link rel="stylesheet" href="./style.css?v=layout-20260606-3" />
+    <script src="https://unpkg.com/@strudel/web@1.3.0/dist/index.js"></script>
+    <script defer src="./app.js?v=single-pattern-source-20260607"></script>
   </head>
   <body>
     <main class="layout">
@@ -23,25 +26,35 @@
           <button id="stop-button" type="button">Parar</button>
         </div>
         <div class="preset-picker">
-          <label for="preset-select">Preset sonoro</label>
-          <select id="preset-select"></select>
+          <label for="emotion-select">Categoria expressiva simulada</label>
+          <select id="emotion-select"></select>
         </div>
         <p id="status-text" class="status">Carregando configuracao local...</p>
       </section>
 
       <section class="workspace-grid">
-        <section class="panel preview-panel">
-          <div class="panel-header">
-            <h2>Camera + Overlay</h2>
-            <span class="badge">WebSocket</span>
-          </div>
-          <div class="preview-frame">
-            <img id="preview-image" alt="Preview da camera" />
-            <p id="preview-placeholder" class="preview-placeholder">
-              Aguardando preview da camera...
-            </p>
-          </div>
-        </section>
+        <div class="media-column">
+          <section class="panel preview-panel">
+            <div class="panel-header">
+              <h2>Camera + Overlay</h2>
+              <span class="badge">WebSocket</span>
+            </div>
+            <div class="preview-frame">
+              <img id="preview-image" alt="Preview da camera" />
+              <p id="preview-placeholder" class="preview-placeholder">
+                Aguardando preview da camera...
+              </p>
+            </div>
+          </section>
+
+          <section class="panel code-panel">
+            <div class="panel-header">
+              <h2>Codigo Strudel Equivalente</h2>
+              <span class="badge">Live Coding</span>
+            </div>
+            <pre id="code-view">Aguardando estado musical...</pre>
+          </section>
+        </div>
 
         <section class="panel state-panel">
           <div class="panel-header">
@@ -118,23 +131,51 @@
               <dd id="sweep-direction-value">none</dd>
             </div>
             <div>
-              <dt>Preset</dt>
-              <dd id="preset-name-value">Neutral</dd>
+              <dt>Perfil expressivo</dt>
+              <dd id="profile-name-value">Neutro</dd>
             </div>
             <div>
               <dt>Descricao</dt>
-              <dd id="preset-description-value">Aguardando preset...</dd>
+              <dd id="profile-description-value">Aguardando perfil...</dd>
+            </div>
+            <div>
+              <dt>Categoria</dt>
+              <dd id="emotion-value">neutral</dd>
+            </div>
+            <div>
+              <dt>Fonte</dt>
+              <dd id="emotion-source-value">manual</dd>
+            </div>
+            <div>
+              <dt>Confianca</dt>
+              <dd id="emotion-confidence-value">1.000</dd>
+            </div>
+            <div>
+              <dt>BPM base</dt>
+              <dd id="profile-bpm-value">92</dd>
+            </div>
+            <div>
+              <dt>Densidade</dt>
+              <dd id="profile-density-value">1.000</dd>
+            </div>
+            <div>
+              <dt>Intensidade</dt>
+              <dd id="profile-intensity-value">1.000</dd>
+            </div>
+            <div>
+              <dt>Variacao</dt>
+              <dd id="profile-variation-value">0.300</dd>
+            </div>
+            <div>
+              <dt>Cena musical</dt>
+              <dd id="scene-name-value">Pulso equilibrado</dd>
+            </div>
+            <div>
+              <dt>Camadas</dt>
+              <dd id="scene-layers-value">melody, bass, drums</dd>
             </div>
           </dl>
         </section>
-      </section>
-
-      <section class="panel code-panel">
-        <div class="panel-header">
-          <h2>Codigo Strudel Equivalente</h2>
-          <span class="badge">Live Coding</span>
-        </div>
-        <pre id="code-view">Aguardando dados do Python...</pre>
       </section>
     </main>
   </body>

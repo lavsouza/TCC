@@ -14,9 +14,14 @@
   box-sizing: border-box;
 }
 
+html {
+  touch-action: manipulation;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
+  overflow-x: hidden;
   background:
     radial-gradient(circle at top left, #fff3d6 0%, transparent 28%),
     radial-gradient(circle at bottom right, #d8f3dc 0%, transparent 34%),
@@ -36,9 +41,17 @@ body {
   display: grid;
   gap: 20px;
   grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.9fr);
+  align-items: start;
+}
+
+.media-column {
+  min-width: 0;
+  display: grid;
+  gap: 20px;
 }
 
 .panel {
+  min-width: 0;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 22px;
@@ -151,7 +164,9 @@ button:disabled {
 
 .preview-frame {
   position: relative;
-  min-height: 420px;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 0;
   border-radius: 18px;
   overflow: hidden;
   background:
@@ -165,8 +180,11 @@ button:disabled {
 #preview-image {
   display: none;
   width: 100%;
-  height: auto;
+  height: 100%;
   object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+  touch-action: none;
 }
 
 .preview-placeholder {
@@ -183,6 +201,14 @@ button:disabled {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 16px;
+}
+
+.state-panel {
+  min-width: 0;
+}
+
+.code-panel {
+  min-width: 0;
 }
 
 .state-grid div {
@@ -208,7 +234,11 @@ dd {
 }
 
 pre {
+  width: 100%;
+  max-width: 100%;
   overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   padding: 18px;
   border-radius: 16px;
   background: #141414;
@@ -223,6 +253,6 @@ pre {
   }
 
   .preview-frame {
-    min-height: 300px;
+    min-height: 0;
   }
 }
