@@ -1,68 +1,38 @@
 @startuml
-title MoveCodeBeats - Diagrama de Sequencia
+title MoveCodeBeats - Sequencia Em Tempo Real
 autonumber
 
 actor Usuario
-participant "main.py" as Main
-participant "Camera" as Camera
-participant "HandTracker" as HandTracker
-participant "MovementProcessor" as MovementProcessor
-participant "GestureMapper" as GestureMapper
-participant "Visualizer" as Visualizer
-participant "StrudelOutput" as StrudelOutput
-participant "BridgeServer" as BridgeServer
-participant "Browser" as Browser
-participant "Strudel Runtime" as StrudelRuntime
+participant React
+participant FastAPI
+participant SessionService
+participant RealtimeHub
+participant CaptureRuntime
+participant StateService
+participant StrudelEngine
 
-Main -> StrudelOutput : start()
-activate StrudelOutput
-StrudelOutput -> BridgeServer : start()
-StrudelOutput --> Main : interface web pronta
-deactivate StrudelOutput
+React -> FastAPI : POST /api/v1/sessions
+FastAPI -> SessionService : create()
+SessionService --> React : Session
+React -> FastAPI : WebSocket /sessions/{id}/stream
+FastAPI -> RealtimeHub : connect()
+RealtimeHub --> React : session.status.v1
 
-loop enquanto a aplicacao estiver em execucao
-  Usuario -> Camera : movimenta a mao
-  Main -> HandTracker : read()
-  activate HandTracker
-  HandTracker -> Camera : read()
-  Camera --> HandTracker : frame
-  HandTracker -> HandTracker : espelha frame\nconverte BGR -> RGB\nexecuta MediaPipe
-  HandTracker --> Main : frame, HandsFrame | None
-  deactivate HandTracker
-
-  Main -> MovementProcessor : process(hand_frame)
-  activate MovementProcessor
-  MovementProcessor -> MovementProcessor : calcula x, y,\nvelocidade e abertura\naplica suavizacao
-  MovementProcessor --> Main : MotionFeatures
-  deactivate MovementProcessor
-
-  Main -> GestureMapper : map(motion)
-  activate GestureMapper
-  GestureMapper -> GestureMapper : escolhe nota\ndefine gain\ndefine brilho
-  GestureMapper --> Main : SoundParameters
-  deactivate GestureMapper
-
-  Main -> Visualizer : render_overlay(frame,\nhand_frame, motion)
-  activate Visualizer
-  Visualizer -> Visualizer : desenha landmarks,\nindices e identificacao
-  Visualizer --> Main : overlay anotado
-  deactivate Visualizer
-
-  Main -> StrudelOutput : publish_state(motion, sound_params)
-  activate StrudelOutput
-  StrudelOutput -> BridgeServer : payload type=state
-  BridgeServer -> Browser : JSON com nota,\ngain, brilho e codigo
-  Browser -> StrudelRuntime : atualiza pattern
-  deactivate StrudelOutput
-
-  Main -> StrudelOutput : publish_preview(overlay)
-  activate StrudelOutput
-  StrudelOutput -> BridgeServer : payload type=frame
-  BridgeServer -> Browser : JPEG base64 do preview
-  Browser -> Browser : atualiza painel da camera
-  deactivate StrudelOutput
+loop captura ativa
+  Usuario -> CaptureRuntime : movimenta as maos
+  CaptureRuntime -> StateService : process_frame(frame, hands)
+  StateService -> StateService : features, gestos,\nmapeamento, perfil e cena
+  StateService --> CaptureRuntime : eventos de estado e preview
+  CaptureRuntime -> RealtimeHub : publish_from_capture()
+  RealtimeHub --> React : music.state.v1
+  RealtimeHub --> React : preview.frame.v1
+  React -> StrudelEngine : update(MusicalState)
+  StrudelEngine -> StrudelEngine : suaviza + compila + setPattern
+  StrudelEngine --> Usuario : som via WebAudio
 end
 
-Main -> HandTracker : close()
-Main -> StrudelOutput : stop()
+Usuario -> React : seleciona perfil
+React -> FastAPI : PATCH /sessions/{id}/profile
+FastAPI -> SessionService : select_profile()
+SessionService --> React : Session atualizada
 @enduml

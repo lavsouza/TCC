@@ -1,0 +1,1 @@
+"""Aplicacao FastAPI do MoveCodeBeats."""

@@ -188,6 +188,15 @@ def normalize_emotion_id(value: str | None) -> str:
     return _ALIASES.get(normalized, "neutral")
 
 
+def is_known_emotion_id(value: str | None) -> bool:
+    if not value:
+        return False
+
+    normalized = unicodedata.normalize("NFKD", value.strip().lower())
+    normalized = "".join(char for char in normalized if not unicodedata.combining(char))
+    return normalized in _ALIASES
+
+
 def get_emotion_profile(profile_id: str | None) -> EmotionProfile:
     return _PROFILES[normalize_emotion_id(profile_id)]
 

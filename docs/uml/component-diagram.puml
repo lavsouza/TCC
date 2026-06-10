@@ -1,81 +1,40 @@
 @startuml
-title MoveCodeBeats - Diagrama de Componentes
+title MoveCodeBeats - Componentes
 skinparam componentStyle rectangle
-skinparam packageStyle rectangle
 
-actor "Usuario" as User
-node "Webcam" as Camera
-node "Navegador" as Browser
-component "MediaPipe\nHandLandmarker" as MediaPipe
-component "Strudel Runtime" as StrudelRuntime
+actor Usuario
+node Webcam
+node Navegador
 
-package "MoveCodeBeats" {
-  component "main.py\nOrquestracao" as Main
-
-  package "Captura" {
-    component "HandTracker\ncapture/hand_tracker.py" as HandTracker
-  }
-
-  package "Processamento" {
-    component "MovementProcessor\nprocessing/movement_processor.py" as MovementProcessor
-  }
-
-  package "Mapeamento Musical" {
-    component "GestureMapper\nmapping/gesture_mapper.py" as GestureMapper
-  }
-
-  package "Visualizacao" {
-    component "render_overlay\nutils/visualizer.py" as Visualizer
-  }
-
-  package "Saida Web + Strudel" {
-    component "StrudelOutput\nintegration/strudel/output.py" as StrudelOutput
-    component "BridgeServer\nintegration/strudel/bridge_server.py" as BridgeServer
-    component "WebServer\nintegration/strudel/web_server.py" as WebServer
-    component "PreviewPublisher\nintegration/strudel/preview_publisher.py" as PreviewPublisher
-    component "StatePublisher\nintegration/strudel/publisher.py" as StatePublisher
-  }
-
-  package "Base Compartilhada" {
-    component "Config\nutils/config.py" as Config
-    component "Models\nutils/models.py" as Models
-  }
+package "Backend Python" {
+  component "Capture\nMediaPipe + OpenCV" as Capture
+  component "Processing\nfeatures + gestos" as Processing
+  component "Mapping\nparametros musicais" as Mapping
+  component "Strudel Domain\nperfis + cenas" as Domain
+  component "Application Services" as Services
+  component "FastAPI\nREST + WebSocket" as API
 }
 
-User --> Camera : movimenta a mao
-Camera --> HandTracker : frame de video
-HandTracker --> MediaPipe : detect_for_video()
-HandTracker --> MovementProcessor : HandFrame
-MovementProcessor --> GestureMapper : MotionFeatures
-HandTracker --> Visualizer : frame + landmarks
-MovementProcessor --> Visualizer : features
-GestureMapper --> Visualizer : nota e parametros
+package "Frontend React" {
+  component "API Client" as Client
+  component "Interface" as UI
+  component "Pattern Builder" as Builder
+  component "Strudel Engine" as Engine
+}
 
-GestureMapper --> StrudelOutput : SoundParameters
-Visualizer --> StrudelOutput : overlay da camera
-StrudelOutput --> StatePublisher
-StrudelOutput --> PreviewPublisher
-StrudelOutput --> BridgeServer : publica payloads
-StrudelOutput --> WebServer : serve UI
-BridgeServer --> Browser : WebSocket
-WebServer --> Browser : HTTP
-Browser --> StrudelRuntime : monta pattern e codigo\nexecuta Pattern
+cloud "WebAudio" as Audio
 
-Main --> HandTracker : read(), close()
-Main --> MovementProcessor : process()
-Main --> GestureMapper : map()
-Main --> Visualizer : render_overlay()
-Main --> StrudelOutput : start(), publish_state(), publish_preview(), stop()
-
-Config --> HandTracker
-Config --> MovementProcessor
-Config --> GestureMapper
-Config --> Visualizer
-Config --> StrudelOutput
-
-Models --> HandTracker
-Models --> MovementProcessor
-Models --> GestureMapper
-Models --> Visualizer
-Models --> StrudelOutput
+Usuario --> Webcam
+Webcam --> Capture
+Capture --> Processing
+Processing --> Mapping
+Mapping --> Domain
+Domain --> Services
+Services --> API
+API --> Client : JSON / WebSocket
+Client --> UI
+Client --> Builder : MusicalState
+Builder --> Engine : Pattern
+Engine --> Audio
+Audio --> Usuario
 @enduml

@@ -1,116 +1,128 @@
 # Arquitetura Do Sistema
 
-Este documento descreve a arquitetura atual do `MoveCodeBeats` em sua fase browser-first. O objetivo e mostrar como o movimento capturado pela camera percorre cada camada do sistema ate resultar em preview visual e execucao Strudel no navegador.
-
-## Versao UML
-
-Os diagramas UML em PlantUML estao em `docs/uml/`.
-
-## Visao Geral Em Camadas
+## Visao Geral
 
 ```mermaid
 flowchart LR
-    user["Usuario<br/>Movimenta a mao"] --> camera["Camera / Webcam"]
-    camera --> capture["Camada de Captura<br/>capture/hand_tracker.py"]
-    capture --> processing["Camada de Processamento<br/>processing/movement_processor.py"]
-    processing --> mapping["Camada de Mapeamento Musical<br/>mapping/gesture_mapper.py"]
-    mapping --> profiles["Perfis Expressivos Parametricos<br/>integration/strudel/presets.py"]
-    profiles --> strudel["Camada de Saida Web<br/>integration/strudel/"]
-    capture --> visualizer["Camada de Visualizacao<br/>utils/visualizer.py"]
-    processing --> visualizer
-    mapping --> visualizer
-    visualizer --> strudel
-    strudel --> browser["Navegador<br/>Preview + Codigo + Strudel"]
-    browser -->|"selecao manual"| profiles
-
-    config["Configuracao Central<br/>utils/config.py"] --> capture
-    config --> processing
-    config --> mapping
-    config --> strudel
-    config --> visualizer
-
-    models["Modelos de Dados<br/>utils/models.py"] --> capture
-    models --> processing
-    models --> mapping
-    models --> strudel
-    models --> visualizer
-
-    main["Orquestracao do Sistema<br/>main.py"] --> capture
-    main --> processing
-    main --> mapping
-    main --> visualizer
-    main --> strudel
+    U["Usuario"] --> C["Camera"]
+    C --> H["HandTracker<br/>MediaPipe"]
+    H --> P["MovementProcessor<br/>features + gestos"]
+    P --> M["GestureMapper<br/>parametros musicais"]
+    M --> S["StateService<br/>perfil + cena"]
+    S --> API["FastAPI REST/WebSocket"]
+    API --> R["React + TypeScript"]
+    R --> B["PatternBuilder"]
+    B --> E["StrudelEngine"]
+    E --> A["WebAudio"]
+    S --> V["PreviewPublisher"]
+    V --> API
 ```
 
-## Fluxo De Dados Em Tempo Real
+## Camadas
+
+```mermaid
+flowchart TB
+    subgraph Domain["Dominio Python"]
+        Capture["capture/"]
+        Processing["processing/"]
+        Mapping["mapping/"]
+        Profiles["integration/strudel/"]
+    end
+
+    subgraph Application["Aplicacao Backend"]
+        State["StateService"]
+        Sessions["SessionService"]
+        Runtime["CaptureRuntime"]
+        Hub["RealtimeHub"]
+    end
+
+    subgraph Transport["Transporte"]
+        FastAPI["REST /api/v1"]
+        WebSocket["WebSocket versionado"]
+    end
+
+    subgraph Frontend["Aplicacao React"]
+        ApiClient["API Client"]
+        UI["Componentes/UI"]
+        Compiler["Pattern Builder"]
+        Engine["Strudel Engine"]
+    end
+
+    Capture --> Runtime
+    Runtime --> State
+    Processing --> State
+    Mapping --> State
+    Profiles --> State
+    State --> Hub
+    Sessions --> FastAPI
+    Hub --> WebSocket
+    FastAPI --> ApiClient
+    WebSocket --> ApiClient
+    ApiClient --> UI
+    ApiClient --> Compiler
+    Compiler --> Engine
+```
+
+## Sequencia Em Tempo Real
 
 ```mermaid
 sequenceDiagram
     participant U as Usuario
-    participant C as Camera
-    participant H as HandTracker
-    participant P as MovementProcessor
-    participant M as GestureMapper
-    participant V as Visualizer
-    participant O as StrudelOutput
-    participant B as Browser
+    participant C as CaptureRuntime
+    participant S as StateService
+    participant H as RealtimeHub
+    participant R as React
+    participant E as StrudelEngine
 
-    B->>O: Seleciona categoria expressiva simulada
-    O->>O: Resolve EmotionProfile e fonte manual
-    U->>C: Movimenta a mao em frente a camera
-    C->>H: Entrega frame de video
-    H->>H: Detecta landmarks com MediaPipe
-    H->>P: HandFrame
-    P->>P: Calcula posicao, velocidade e abertura
-    P->>M: MotionFeatures
-    M->>M: Traduz gesto para parametros sonoros
-    M->>O: SoundParameters
-    O->>O: Combina movimento + perfil parametrico
-    H->>V: Frame + landmarks
-    P->>V: Features processadas
-    M->>V: Nota, frequencia, brilho e estado
-    V->>O: Overlay da camera
-    O->>B: Estado musical por WebSocket
-    O->>B: Preview visual por WebSocket
-    B-->>U: Interface visual + execucao Strudel
+    R->>S: POST /api/v1/sessions
+    R->>H: WS /sessions/{id}/stream
+    U->>C: Movimento diante da camera
+    C->>S: frame + HandsFrame
+    S->>S: processa features, gestos e mapeamento
+    S->>H: music.state.v1
+    S->>H: preview.frame.v1
+    H->>R: envelopes versionados
+    R->>R: atualiza interface e preview
+    R->>E: MusicalState
+    E->>E: suaviza, compila e troca pattern
+    E-->>U: som via WebAudio
 ```
 
-## Papel De Cada Camada
+## Responsabilidades
 
-- `main.py`: inicia o sistema, instancia os modulos, controla o loop principal e encerra os recursos corretamente.
-- `capture/hand_tracker.py`: abre a camera, prepara o modelo do MediaPipe, detecta a mao e converte o resultado para a estrutura `HandFrame`.
-- `processing/movement_processor.py`: transforma landmarks em features semanticas mais estaveis, como posicao suavizada, velocidade e abertura da mao.
-- `mapping/gesture_mapper.py`: traduz essas features em parametros musicais e acusticos, como nota, frequencia, amplitude e brilho.
-- `integration/strudel/`: publica o estado Strudel estruturado, expande o preview da camera e entrega tudo para o navegador.
-- `utils/visualizer.py`: desenha a malha da mao, os indices dos landmarks e a identificacao das maos para depuracao e demonstracao.
-- `utils/config.py`: centraliza os parametros configuraveis do sistema.
-- `utils/models.py`: define as estruturas de dados trocadas entre as camadas.
-- `tests/`: valida partes importantes da logica sem depender de camera real.
+- `CaptureRuntime`: executa camera e MediaPipe em thread dedicada.
+- `StateService`: coordena processamento, mapeamento, perfil, cena e preview,
+  sem depender de FastAPI.
+- `RealtimeHub`: atravessa com seguranca a fronteira thread/asyncio e distribui
+  eventos aos WebSockets.
+- `SessionService`: cria sessoes e registra a selecao manual de perfil.
+- `FastAPI`: valida contratos, publica REST, WebSocket, CORS e OpenAPI.
+- `MoveCodeBeatsApi`: cliente TypeScript da API.
+- `patternBuilder.ts`: unica fonte do codigo/pattern Strudel.
+- `engine.ts`: inicializa samples, controla CPS, suaviza valores e usa
+  `setPattern` sem reiniciar o scheduler.
 
-## Estruturas De Dados Que Interligam O Sistema
+## Contratos
 
-```mermaid
-flowchart TD
-    raw["Frame da camera"] --> hand["HandFrame<br/>landmarks + handedness + timestamp"]
-    hand --> motion["MotionFeatures<br/>x, y, velocidade, abertura"]
-    motion --> sound["SoundParameters<br/>frequencia, amplitude, brilho"]
-    emotion["Selecao manual<br/>neutral, joy, sadness, anger"] --> profile["EmotionProfile<br/>faixas, ritmo, synths, variacao"]
-    profile --> scene["SceneRecipe<br/>melodia, harmonia, baixo, bateria, textura"]
-    scene --> state
-    sound --> state["StrudelState<br/>gesto + perfil + cena"]
-    raw --> overlay["Overlay visual<br/>camera + anotacoes"]
-    overlay --> preview["PreviewFrame<br/>JPEG + metadados"]
-    state --> browser["Navegador"]
-    preview --> browser
-    browser --> code["Codigo Strudel<br/>derivado no frontend"]
+Os eventos possuem envelope `1.0`:
+
+```json
+{
+  "schema_version": "1.0",
+  "type": "music.state.v1",
+  "timestamp": 1770000000.0,
+  "session_id": "uuid",
+  "data": {}
+}
 ```
 
-## Justificativa Arquitetural
+O backend transmite dados musicais declarativos, nao JavaScript executavel. O
+frontend compila esses dados para Strudel. Essa fronteira evita executar codigo
+recebido da rede e deixa o motor musical independente do transporte.
 
-- A separacao em camadas reduz acoplamento e facilita manutencao.
-- O uso de estruturas de dados intermediarias torna o fluxo claro e testavel.
-- A centralizacao da interface no navegador aproxima o prototipo da ideia central de integracao com Strudel.
-- A remocao do sintetizador local reduz redundancia e concentra a evolucao do projeto na traducao gesto -> codigo executavel.
-- A selecao manual de categoria fica desacoplada da regra musical, permitindo que um classificador substitua essa origem no futuro sem alterar o gerador Strudel.
-- As cenas sao declarativas e deterministicas: o mesmo perfil e estado produzem a mesma receita, permitindo testes e comparacoes controladas.
-- O frontend compila a cena estruturada sem conhecer as regras de classificacao ou deteccao gestual.
+## Implantacao Atual E Futura
+
+Nas fases 0 a 4, backend e frontend podem ser hospedados separadamente, mas o
+backend ainda precisa estar conectado a webcam. Para uso totalmente online, a
+fase seguinte deve mover `getUserMedia` e MediaPipe para o navegador ou adotar
+um agente local autenticado.

@@ -1,155 +1,133 @@
 # MoveCodeBeats
 
-Prototipo inicial de TCC para transformar movimentos corporais em parametros musicais. Nesta fase o projeto foca em capturar a mao, extrair features de movimento e publicar uma interface unificada no navegador, combinando preview da camera com overlay e execucao Strudel.
+Prototipo de TCC que transforma movimentos das maos em estruturas musicais
+executadas no Strudel. O backend captura a camera com MediaPipe, extrai features
+e gestos, aplica o mapeamento musical e transmite o estado. O frontend React
+renderiza a performance e executa o motor sonoro no navegador.
 
-## Arquitetura revisada
+## Tecnologias
 
-O projeto foi reorganizado em uma pipeline pequena separada em camadas:
+- Python 3.11+
+- FastAPI 0.136.3 e Uvicorn 0.49.0
+- MediaPipe 0.10.33 e OpenCV 4.13.0.92
+- React 19.2.7, TypeScript 6.0.3 e Vite 8.0.16
+- Strudel Web 1.3.0
 
-1. `capture/hand_tracker.py`
-   Responsavel por abrir a camera, espelhar o feed e extrair landmarks da mao com MediaPipe.
-2. `processing/movement_processor.py`
-   Converte landmarks em features mais estaveis por mao: posicao suavizada, velocidade do indicador e abertura entre polegar e indicador. A etapa atual produz uma mao primaria, uma secundaria e uma primeira camada de gestos discretos na mao primaria (`pinch`, `release`, `hold`, `sweep`).
-3. `mapping/gesture_mapper.py`
-   Traduz as features em parametros musicais coerentes: a mao primaria controla nota e gain, enquanto a mao secundaria controla brilho e escolha do synth no Strudel.
-4. `integration/strudel/`
-   Publica o estado musical do prototipo, resolve cenas Strudel multicamada, combina o perfil expressivo com a modulacao gestual, gera o codigo equivalente e envia tudo para a interface web por HTTP + WebSocket.
-5. `utils/visualizer.py`
-   Desenha a malha da mao, os indices dos landmarks e a identificacao de cada mao sobre o frame da camera.
-6. `main.py`
-   Orquestra o ciclo principal, atualiza a ponte web e faz o cleanup da camera e dos servidores locais.
+## Arquitetura
 
-O desenho da arquitetura do sistema esta em `docs/architecture.md`.
-Os diagramas UML em PlantUML estao em `docs/uml/`.
-O detalhamento tecnico completo da implementacao atual esta em `docs/implementation-deep-dive.md`.
-O relatorio sintetico de handoff para outro assistente de IA esta em `docs/ai-handoff-report.md`.
+```text
+Camera -> MediaPipe -> MovementProcessor -> GestureMapper
+       -> StrudelPublisher -> FastAPI/WebSocket
+       -> React -> PatternBuilder -> StrudelEngine -> WebAudio
+```
 
-## Por que esta arquitetura e melhor para o TCC
+O repositorio continua monolitico, mas possui duas aplicacoes desacopladas:
 
-- Separa claramente captura, processamento, mapeamento e saida web.
-- Centraliza o prototipo no navegador, mais alinhado ao caminho de integracao com Strudel.
-- Facilita trocar a traducao atual por patterns e eventos gestuais mais sofisticados.
-- Permite demonstracao visual e sonora em uma unica interface.
+- `backend/`: API, sessoes, contratos e runtime de captura.
+- `frontend/`: interface React e runtime Strudel.
+- `capture/`: camera e deteccao de landmarks.
+- `processing/`: suavizacao, features e gestos temporais.
+- `mapping/`: traducao das features em parametros musicais.
+- `integration/strudel/`: perfis, cenas e estado musical declarativo.
+- `contracts/`: protocolo publico REST/WebSocket.
+- `tests/`: testes do dominio e da API.
+
+O detalhamento visual esta em `docs/architecture.md` e a decisao arquitetural em
+`docs/adr/0001-fastapi-react-boundary.md`.
 
 ## Mapeamento atual
 
-- Mao primaria: movimento horizontal (eixo x) do indicador -> escolha de nota em escala pentatonica menor.
-- Mao primaria: movimento vertical (eixo y) do indicador -> gain.
-- Mao secundaria: movimento horizontal (eixo x) -> escolha do synth entre `sine`, `triangle`, `sawtooth` e `square`.
-- Mao secundaria: velocidade + abertura entre polegar e indicador -> brilho timbrico, convertido depois em LPF no Strudel.
-- Se a mao secundaria nao estiver presente, o brilho volta a ser calculado pela mao primaria e o synth assume o default `sawtooth`.
-- Gestos discretos da mao primaria:
-  - `pinch` intensifica a execucao atual;
-  - `release` relaxa a articulacao logo apos a soltura;
-  - `hold` ativa uma camada ritmica continua;
-  - `sweep` alterna variacoes simples de pattern no Strudel.
-## Perfis expressivos parametricos
+- Mao primaria no eixo X: nota da escala pentatonica menor.
+- Mao primaria no eixo Y: gain.
+- Mao secundaria no eixo X: synth.
+- Velocidade e abertura da mao secundaria: brilho e filtro LPF.
+- Sem a segunda mao, a mao primaria assume o brilho e o synth volta ao padrao.
+- `pinch`: acentua a cena.
+- `release`: relaxa ganho e ambiencia.
+- `hold`: adiciona uma camada continua propria do perfil.
+- `sweep`: altera a variacao ritmica para esquerda ou direita.
 
-O sistema oferece quatro categorias expressivas simuladas:
-
-| Perfil | Categoria interna | BPM | Densidade | Intensidade | Caracteristica |
-| --- | --- | ---: | ---: | ---: | --- |
-| Neutro | `neutral` | 92 | 1.00 | 1.00 | Estavel e equilibrado |
-| Alegria | `joy` | 120 | 1.18 | 1.08 | Rapido, luminoso e variado |
-| Tristeza | `sadness` | 68 | 0.74 | 0.88 | Lento, espacoso e suave |
-| Raiva | `anger` | 136 | 1.24 | 1.16 | Denso, repetitivo e intenso |
-
-Cada perfil define um espaco de possibilidades musicais e uma cena propria. A cena e uma receita estruturada de camadas que pode combinar melodia, harmonia, baixo, percussao e textura. O pattern final continua variando conforme a nota, o brilho, o synth e os gestos capturados.
-
-| Perfil | Cena | Estrutura sonora principal |
-| --- | --- | --- |
-| Neutro | Pulso equilibrado | Melodia, baixo discreto e bateria regular |
-| Alegria | Movimento luminoso | Arpejos, harmonia maior, sincopa e textura aguda |
-| Tristeza | Espaco suspenso | Notas longas, acorde menor, drone e grande ambiencia |
-| Raiva | Pressao fragmentada | Repeticao densa, ritmos euclidianos, bit crush e distorcao |
-
-O compilador usa recursos nativos do Strudel como `stack`, `setcpm`, `euclid`,
-`euclidRot`, `palindrome`, envelopes de ataque/release, panorama, delay, reverb,
-filtros, `shape`, `distort` e `crush`. As variacoes sao deterministicas para
-facilitar comparacao experimental e reproducao dos testes.
-
-O runtime web usa `@strudel/web@1.3.0` e carrega explicitamente o banco
-`github:tidalcycles/dirt-samples`, necessario para as camadas de bateria
-(`bd`, `sd`, `hh`, `cp`, `rim` e `oh`). Atualizacoes gestuais substituem o
-pattern com `setPattern(...)` sem reiniciar o relogio musical, permitindo que
-os ciclos ritmicos avancem normalmente.
-
-Cada cena tambem possui um `master_gain` aplicado depois da soma das camadas.
-Esse ganho compensa a reducao causada pelos ganhos relativos de melodia, baixo,
-bateria e textura, mantendo margem menor nas cenas mais distorcidas.
-
-Para evitar transicoes quebradas, o navegador:
-
-- limita atualizacoes continuas do pattern a aproximadamente 150 ms;
-- prioriza mudancas estruturais como gesto, synth, pattern e perfil;
-- suaviza gain, brilho e LPF exponencialmente usando `transition_seconds`;
-- tolera perdas de rastreamento de ate 360 ms antes de interromper o scheduler.
-
-A cena de Raiva usa uma politica um pouco mais conservadora porque possui mais
-ataques por ciclo: atualizacao continua a cada 240 ms, tolerancia de rastreamento
-de 520 ms e mudanca de synth tratada como modulacao continua. Seus envelopes
-tambem possuem releases maiores para evitar microvazios entre eventos densos.
-
-Nesta etapa, a categoria e escolhida manualmente e publicada com `emotion_source="manual"` e `emotion_confidence=1.0`. Essa selecao simula a futura saida de um classificador treinado com movimentos corporais representados. O sistema ainda nao detecta emocoes internas reais.
+Os perfis `neutral`, `happy`, `sad` e `angry` definem cenas multicamada
+distintas. A escolha ainda e manual; o contrato ja guarda origem e confianca
+para uma futura selecao por classificador.
 
 ## Instalacao
+
+Backend:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
-Na primeira execucao, o projeto pode baixar automaticamente o modelo `hand_landmarker.task` do MediaPipe para a pasta `models/`.
+Frontend:
+
+```powershell
+cd frontend
+npm install
+```
+
+Na primeira execucao, o modelo `hand_landmarker.task` pode ser baixado para
+`models/`.
 
 ## Execucao
 
+Terminal 1, na raiz:
+
 ```powershell
-.\.venv\Scripts\python.exe main.py
+python main.py
 ```
 
-Ao iniciar:
+A API fica em `http://127.0.0.1:8000`. A documentacao OpenAPI fica em
+`http://127.0.0.1:8000/docs`.
 
-1. o terminal exibe a URL local da interface, por padrao `http://127.0.0.1:8080`
-2. abra essa URL no navegador
-3. clique em `Conectar`
-4. clique em `Ativar Audio`
-5. escolha uma categoria expressiva simulada no seletor da interface
+Terminal 2:
 
-Na primeira ativacao, o carregamento dos samples de bateria pode levar alguns
-segundos, dependendo da conexao.
+```powershell
+cd frontend
+npm run dev
+```
 
-Se `8080` ou `8765` estiverem ocupadas ou bloqueadas no Windows, o prototipo tenta automaticamente as proximas portas livres dentro de uma pequena faixa local e imprime a URL final no terminal.
+Abra `http://127.0.0.1:5173`. A interface cria uma sessao, conecta o WebSocket
+automaticamente e mostra o preview. O audio so inicia depois do clique em
+`Ativar audio`, conforme a politica WebAudio dos navegadores.
 
-Para encerrar o prototipo, use `Ctrl+C` no terminal onde o backend Python esta rodando.
+Para executar a API sem abrir a camera:
 
-## Interface Browser-First
+```powershell
+$env:MCB_CAPTURE_ENABLED="false"
+python main.py
+```
 
-O prototipo agora funciona sem a janela local do OpenCV e sem o sintetizador local anterior.
+## API v1
 
-- O backend Python continua responsavel pela captura da camera e pela deteccao da mao.
-- O overlay visual e convertido em preview JPEG e enviado ao navegador via WebSocket.
-- O estado musical atual tambem e enviado ao navegador.
-- A pagina renderiza o preview da camera sem o bloco textual antigo sobre a imagem, mostra os parametros atuais em um painel proprio e executa o Strudel diretamente no browser.
-- A pagina permite selecionar manualmente um perfil expressivo, que altera ritmo, velocidade, faixas de gain/LPF, intensidade, variacao e synth padrao.
-- O painel informa a cena musical e as camadas ativas, enquanto a camera permanece livre de blocos textuais.
-- A escolha e enviada ao backend por WebSocket; o frontend nao contem a regra musical principal.
+- `GET /api/v1/health`
+- `GET /api/v1/catalog`
+- `GET /api/v1/profiles`
+- `GET /api/v1/profiles/{profile_id}`
+- `POST /api/v1/sessions`
+- `GET /api/v1/sessions/{session_id}`
+- `PATCH /api/v1/sessions/{session_id}/profile`
+- `WS /api/v1/sessions/{session_id}/stream`
 
-Nesta versao, o sistema combina estado continuo com eventos gestuais discretos e cenas Strudel multicamada.
+Os eventos usam envelope com `schema_version`, `type`, `timestamp`,
+`session_id` e `data`. Consulte `contracts/README.md`.
 
-## Expansao Para Duas Maos
+## Testes
 
-- A captura agora aceita ate duas maos no MediaPipe.
-- O overlay visual ja desenha as duas maos quando elas estao presentes.
-- O backend informa qual mao esta sendo usada como mao primaria e qual esta atuando como mao secundaria.
-- A mao primaria controla nota e gain.
-- A mao secundaria controla brilho timbrico e escolha do synth do Strudel.
-- Na ausencia da mao secundaria, o sistema faz fallback para um modo de uma mao, preservando a tocabilidade do prototipo.
+```powershell
+python -m unittest discover -s tests -v
+cd frontend
+npm run test
+npm run build
+```
 
-## Proximas etapas sugeridas
+## Limitacoes atuais
 
-- Expandir a interpolacao para crossfade completo entre as camadas de cenas diferentes
-- Expandir o papel da segunda mao para controlar eventos, patterns e modulacoes temporais mais complexas
-- Definir o protocolo e coletar o dataset de movimentos corporais representando as quatro categorias
-- Treinar o classificador e substituir `emotion_source="manual"` por `emotion_source="classifier"`
-- Adicionar suavizacao temporal das probabilidades antes de trocar ou interpolar perfis
+- A camera e o perfil ativo ainda sao compartilhados pelo processo Python.
+- O backend precisa executar no computador que possui a webcam.
+- O preview e enviado como JPEG Base64; WebRTC sera mais eficiente em uma fase
+  posterior.
+- Nao existe autenticacao, persistencia de sessoes ou classificador emocional.
+- A captura diretamente no navegador nao faz parte das fases 0 a 4.

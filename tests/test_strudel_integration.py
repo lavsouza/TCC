@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
-import socket
 import time
 import unittest
 
-from integration.strudel.bridge_server import StrudelBridgeServer
 from integration.strudel.note_adapter import to_strudel_note
-from integration.strudel.output import StrudelOutput
 from integration.strudel.preview_publisher import PreviewPublisher
 from integration.strudel.presets import (
     default_preset,
@@ -21,9 +17,8 @@ from integration.strudel.presets import (
 )
 from integration.strudel.publisher import StrudelPublisher
 from integration.strudel.scenes import get_scene, resolve_scene_payload
-from integration.strudel.web_server import StrudelWebServer
 import numpy as np
-from utils.config import PROJECT_ROOT, StrudelConfig
+from utils.config import StrudelConfig
 from utils.models import HandMotion, MotionFeatures, SoundParameters
 
 
@@ -118,7 +113,6 @@ class PresetCatalogTests(unittest.TestCase):
 class StrudelPublisherTests(unittest.TestCase):
     def setUp(self) -> None:
         self.config = StrudelConfig(
-            enabled=True,
             update_hz=8,
             gain_delta=0.03,
             brightness_delta=0.05,
@@ -622,88 +616,9 @@ class StrudelPublisherTests(unittest.TestCase):
         self.assertTrue(self.publisher.should_publish(second))
 
 
-class StrudelOutputEmotionSelectionTests(unittest.TestCase):
-    def test_manual_emotion_message_updates_backend_profile(self) -> None:
-        output = StrudelOutput(StrudelConfig(enabled=True))
-
-        output._handle_client_message(
-            {
-                "type": "emotion/select",
-                "emotionId": "tristeza",
-            }
-        )
-
-        self.assertEqual(output._state_publisher.get_selected_profile(), "sad")
-
-    def test_legacy_preset_message_remains_supported(self) -> None:
-        output = StrudelOutput(StrudelConfig(enabled=True))
-
-        output._handle_client_message(
-            {
-                "type": "preset/select",
-                "presetId": "happy",
-            }
-        )
-
-        self.assertEqual(output._state_publisher.get_selected_profile(), "happy")
-
-
-class StrudelFrontendRuntimeTests(unittest.TestCase):
-    def test_frontend_uses_current_runtime_and_loads_drum_samples(self) -> None:
-        index_html = (PROJECT_ROOT / "web" / "strudel" / "index.html").read_text(
-            encoding="utf-8"
-        )
-        app_js = (PROJECT_ROOT / "web" / "strudel" / "app.js").read_text(
-            encoding="utf-8"
-        )
-
-        self.assertIn("@strudel/web@1.3.0", index_html)
-        self.assertIn('samples("github:tidalcycles/dirt-samples")', app_js)
-
-    def test_frontend_replaces_pattern_without_hushing_each_state(self) -> None:
-        app_js = (PROJECT_ROOT / "web" / "strudel" / "app.js").read_text(
-            encoding="utf-8"
-        )
-
-        self.assertIn("await strudelRepl.setPattern(expression.value, true)", app_js)
-        self.assertNotIn("hush();\n  buildPattern(state).play();", app_js)
-
-    def test_frontend_is_the_single_pattern_and_code_source(self) -> None:
-        app_js = (PROJECT_ROOT / "web" / "strudel" / "app.js").read_text(
-            encoding="utf-8"
-        )
-        publisher_py = (PROJECT_ROOT / "integration" / "strudel" / "publisher.py").read_text(
-            encoding="utf-8"
-        )
-
-        self.assertIn("function buildPatternExpression(state, instantiate = false)", app_js)
-        self.assertIn("codeView.textContent = buildPatternCode(state)", app_js)
-        self.assertIn("codeView.textContent = expression.code", app_js)
-        self.assertNotIn("codeView.textContent = state.code", app_js)
-        self.assertNotIn("build_code", publisher_py)
-        self.assertFalse(
-            (PROJECT_ROOT / "integration" / "strudel" / "code_generator.py").exists()
-        )
-
-    def test_frontend_smooths_continuous_values_and_tolerates_tracking_gaps(self) -> None:
-        app_js = (PROJECT_ROOT / "web" / "strudel" / "app.js").read_text(
-            encoding="utf-8"
-        )
-
-        self.assertIn("const CONTINUOUS_UPDATE_MS = 150", app_js)
-        self.assertIn("const INACTIVE_GRACE_MS = 360", app_js)
-        self.assertIn("function smoothPlaybackState(target)", app_js)
-        self.assertIn("1 - Math.exp(-elapsedSeconds / transitionSeconds)", app_js)
-        self.assertIn("function scheduleInactiveStop(state)", app_js)
-        self.assertIn('callPatternMethod(scenePattern, "postgain", [masterGain])', app_js)
-        self.assertIn("getContinuousUpdateMs(targetPlaybackState)", app_js)
-        self.assertIn("state.scene?.synth_change_priority === false", app_js)
-
-
 class PreviewPublisherTests(unittest.TestCase):
     def test_build_frame_generates_data_url_and_respects_max_width(self) -> None:
         config = StrudelConfig(
-            enabled=True,
             preview_max_width=320,
             preview_jpeg_quality=70,
         )
@@ -717,7 +632,7 @@ class PreviewPublisherTests(unittest.TestCase):
         self.assertGreater(frame.height, 0)
 
     def test_should_publish_respects_preview_rate(self) -> None:
-        config = StrudelConfig(enabled=True, preview_update_hz=10)
+        config = StrudelConfig(preview_update_hz=10)
         publisher = PreviewPublisher(config)
 
         self.assertTrue(publisher.should_publish())
@@ -725,46 +640,6 @@ class PreviewPublisherTests(unittest.TestCase):
 
         time.sleep(0.11)
         self.assertTrue(publisher.should_publish())
-
-
-class ServerFallbackTests(unittest.TestCase):
-    def test_web_server_falls_back_when_preferred_port_is_unavailable(self) -> None:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as occupied:
-            occupied.bind(("127.0.0.1", 0))
-            occupied.listen(1)
-            blocked_port = occupied.getsockname()[1]
-
-            server = StrudelWebServer(
-                host="127.0.0.1",
-                port=blocked_port,
-                directory=Path(PROJECT_ROOT / "web" / "strudel"),
-                config_payload={"wsUrl": "ws://127.0.0.1:9000"},
-                port_search_span=10,
-            )
-
-            try:
-                server.start()
-                self.assertNotEqual(server.base_url, f"http://127.0.0.1:{blocked_port}")
-            finally:
-                server.stop()
-
-    def test_bridge_server_falls_back_when_preferred_port_is_unavailable(self) -> None:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as occupied:
-            occupied.bind(("127.0.0.1", 0))
-            occupied.listen(1)
-            blocked_port = occupied.getsockname()[1]
-
-            server = StrudelBridgeServer(
-                host="127.0.0.1",
-                port=blocked_port,
-                port_search_span=10,
-            )
-
-            try:
-                server.start()
-                self.assertNotEqual(server.port, blocked_port)
-            finally:
-                server.stop()
 
 
 if __name__ == "__main__":

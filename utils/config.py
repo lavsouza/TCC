@@ -57,18 +57,11 @@ class MappingConfig:
 
 @dataclass(slots=True)
 class StrudelConfig:
-    enabled: bool = True
-    ws_host: str = "127.0.0.1"
-    ws_port: int = 8765
-    http_host: str = "127.0.0.1"
-    http_port: int = 8080
-    port_search_span: int = 20
     update_hz: int = 8
     note_change_immediate: bool = True
     gain_precision: int = 3
     gain_delta: float = 0.03
     brightness_delta: float = 0.05
-    auto_open_browser: bool = False
     send_inactive_state: bool = True
     preview_update_hz: int = 12
     preview_jpeg_quality: int = 72

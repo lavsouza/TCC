@@ -1,4 +1,9 @@
-# MoveCodeBeats - Documento Tecnico Detalhado Da Implementacao Atual
+# MoveCodeBeats - Documento Tecnico Da Implementacao Legada
+
+> Este documento descreve a implementacao browser-first anterior a migracao
+> FastAPI + React. Ele foi preservado como registro historico do prototipo.
+> Para a arquitetura atual, consulte `docs/architecture.md`, `README.md`,
+> `contracts/README.md` e `docs/adr/0001-fastapi-react-boundary.md`.
 
 ## 1. Objetivo Deste Documento
 

@@ -1,265 +1,88 @@
 @startuml
-title MoveCodeBeats - Diagrama de Classes
+title MoveCodeBeats - Classes Principais
 skinparam classAttributeIconSize 0
 
-package "utils.config" {
-  class CameraConfig {
-    +device_index: int
-    +frame_width: int
-    +frame_height: int
-    +mirror_feed: bool
-    +max_num_hands: int
-    +min_detection_confidence: float
-    +min_presence_confidence: float
-    +min_tracking_confidence: float
-    +model_path: Path
-    +model_url: str
-  }
-
-  class ProcessingConfig {
-    +position_smoothing: float
-    +velocity_smoothing: float
-    +openness_smoothing: float
-    +velocity_reference: float
-    +hand_span_reference: float
-  }
-
-  class MappingConfig {
-    +root_midi: int
-    +octaves: int
-    +scale_intervals: tuple
-    +min_amplitude: float
-    +max_amplitude: float
-    +velocity_weight: float
-    +openness_weight: float
-  }
-
-  class StrudelConfig {
-    +enabled: bool
-    +ws_host: str
-    +ws_port: int
-    +http_host: str
-    +http_port: int
-    +update_hz: int
-    +gain_precision: int
-    +gain_delta: float
-    +brightness_delta: float
-    +send_inactive_state: bool
-    +preview_update_hz: int
-    +preview_jpeg_quality: int
-    +preview_max_width: int
-  }
-
-  class AppConfig {
-    +camera: CameraConfig
-    +processing: ProcessingConfig
-    +mapping: MappingConfig
-    +strudel: StrudelConfig
-  }
-}
-
-package "utils.models" {
-  class Landmark {
-    +x: float
-    +y: float
-    +z: float
-  }
-
-  class HandFrame {
-    +landmarks: list[Landmark]
-    +handedness: str
-    +timestamp: float
-  }
-
-  class MotionFeatures {
-    +raw_x: float
-    +raw_y: float
-    +x: float
-    +y: float
-    +velocity: float
-    +openness: float
-    +active: bool
-  }
-
-  class ScaleNote {
-    +midi: int
-    +label: str
-    +frequency: float
-  }
-
-  class SoundParameters {
-    +frequency: float
-    +amplitude: float
-    +brightness: float
-    +note_label: str
-    +active: bool
-  }
-}
-
-package "integration.strudel.models" {
-  class StrudelState {
-    +active: bool
-    +note_label: str
-    +strudel_note: str
-    +frequency: float
-    +gain: float
-    +brightness: float
-    +lpf: int
-    +synth: str
-    +code: str
-    +timestamp: float
-  }
-
-  class PreviewFrame {
-    +image: str
-    +width: int
-    +height: int
-    +timestamp: float
-  }
-}
-
-package "integration.strudel.scenes" {
-  class SceneRecipe {
-    +id: str
-    +name: str
-    +beats_per_cycle: int
-    +layers: tuple[LayerRecipe]
-    +gesture: GestureRecipe
-  }
-
-  class LayerRecipe {
-    +id: str
-    +kind: str
-    +patterns: tuple[str, str, str]
-    +sound: str
-    +gain: float
-  }
-
-  class GestureRecipe {
-    +pinch_gain: float
-    +release_gain: float
-    +hold_layer: LayerRecipe
-    +sweep_left: str
-    +sweep_right: str
-  }
-}
-
-package "capture" {
+package "Dominio" {
   class HandTracker {
-    -_config: CameraConfig
-    -_capture
-    -_hands
-    +__init__(config: CameraConfig)
-    +read(): tuple[object, HandsFrame | None]
+    +read(): tuple
     +close(): None
   }
-}
-
-package "processing" {
   class MovementProcessor {
-    -_config: ProcessingConfig
-    -_prev_raw_x: float | None
-    -_prev_raw_y: float | None
-    -_prev_timestamp: float | None
-    -_smoothed_x: float | None
-    -_smoothed_y: float | None
-    -_smoothed_velocity: float
-    -_smoothed_openness: float
-    +__init__(config: ProcessingConfig)
-    +process(hand_frame: HandFrame | HandsFrame | None): MotionFeatures
+    +process(hands): MotionFeatures
   }
-}
-
-package "mapping" {
   class GestureMapper {
-    -_config: MappingConfig
-    -_scale: list[ScaleNote]
-    +__init__(config: MappingConfig)
-    +map(motion: MotionFeatures): SoundParameters
+    +map(motion): SoundParameters
   }
-}
-
-package "integration.strudel" {
   class StrudelPublisher {
-    -_config: StrudelConfig
-    -_last_state: StrudelState | None
-    -_last_publish_at: float
-    +build_state(params: SoundParameters): StrudelState
-    +should_publish(state: StrudelState): bool
+    +build_state(params, motion): StrudelState
+    +should_publish(state): bool
+    +set_selected_profile(id, source, confidence): None
   }
-
   class PreviewPublisher {
-    -_config: StrudelConfig
-    -_last_publish_at: float
     +build_frame(overlay): PreviewFrame
     +should_publish(): bool
   }
+}
 
-  class StrudelBridgeServer {
-    +start(): None
-    +publish(payload: dict): None
-    +stop(): None
+package "Backend FastAPI" {
+  class StateService {
+    +process_frame(frame, hands): list
+    +select_profile(id): dict
+    +catalog(): list
   }
-
-  class StrudelWebServer {
-    +base_url: str
+  class CaptureRuntime {
     +start(): None
     +stop(): None
+    +status(): dict
   }
-
-  class StrudelOutput {
-    -_config: StrudelConfig
-    -_state_publisher: StrudelPublisher
-    -_preview_publisher: PreviewPublisher
-    -_bridge: StrudelBridgeServer
-    -_web_server: StrudelWebServer
-    +enabled: bool
-    +web_url: str
-    +start(): None
-    +publish_state(motion: MotionFeatures, params: SoundParameters): None
-    +publish_preview(overlay): None
-    +stop(): None
+  class SessionService {
+    +create(): SessionRecord
+    +get(id): SessionRecord
+    +select_profile(id, profile): SessionRecord
+  }
+  class RealtimeHub {
+    +connect(session, websocket): None
+    +broadcast(event): None
+    +publish_from_capture(event): None
+  }
+  class EventEnvelope {
+    +schema_version: str
+    +type: str
+    +timestamp: float
+    +session_id: str
+    +data: dict
   }
 }
 
-package "utils.visualizer" {
-  class Visualizer <<utility>> {
-    +render_overlay(frame, hand_frame, motion)
+package "Frontend TypeScript" {
+  class MoveCodeBeatsApi {
+    +getCatalog(): Catalog
+    +createSession(): Session
+    +selectProfile(session, profile): Session
+    +openStream(session, handlers): WebSocket
+  }
+  class PatternBuilder {
+    +buildPatternCode(state): string
+    +buildPatternExpression(state, runtime): PatternExpression
+  }
+  class StrudelEngine {
+    +activate(): Promise
+    +update(state): void
+    +stop(): void
+    +dispose(): void
   }
 }
 
-AppConfig *-- CameraConfig
-AppConfig *-- ProcessingConfig
-AppConfig *-- MappingConfig
-AppConfig *-- StrudelConfig
-
-HandFrame *-- "21" Landmark
-GestureMapper *-- ScaleNote
-StrudelOutput *-- StrudelPublisher
-StrudelOutput *-- PreviewPublisher
-StrudelOutput *-- StrudelBridgeServer
-StrudelOutput *-- StrudelWebServer
-
-HandTracker --> CameraConfig
-HandTracker --> HandFrame
-MovementProcessor --> ProcessingConfig
-MovementProcessor --> HandFrame
-MovementProcessor --> MotionFeatures
-GestureMapper --> MappingConfig
-GestureMapper --> MotionFeatures
-GestureMapper --> SoundParameters
-StrudelPublisher --> StrudelConfig
-StrudelPublisher --> SoundParameters
-StrudelPublisher --> StrudelState
-StrudelPublisher --> SceneRecipe
-SceneRecipe *-- LayerRecipe
-SceneRecipe *-- GestureRecipe
-GestureRecipe --> LayerRecipe : hold
-PreviewPublisher --> StrudelConfig
-PreviewPublisher --> PreviewFrame
-StrudelOutput --> StrudelConfig
-StrudelOutput --> SoundParameters
-Visualizer ..> HandFrame
-Visualizer ..> MotionFeatures
-Visualizer ..> SoundParameters
+CaptureRuntime *-- HandTracker
+CaptureRuntime --> StateService
+StateService *-- MovementProcessor
+StateService *-- GestureMapper
+StateService *-- StrudelPublisher
+StateService *-- PreviewPublisher
+CaptureRuntime --> RealtimeHub
+RealtimeHub --> EventEnvelope
+SessionService --> StateService
+MoveCodeBeatsApi --> EventEnvelope
+MoveCodeBeatsApi --> PatternBuilder
+PatternBuilder --> StrudelEngine
 @enduml
